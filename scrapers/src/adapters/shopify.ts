@@ -168,8 +168,9 @@ async function scrapeByProductPages(baseUrl: string, opts: ScrapeOptions, warnin
           products.push(mapShopifyJsProduct(await getJson<ShopifyJsProduct>(`${url}.js`, { retries: 1 }), baseUrl));
           jsOk++;
           continue;
-        } catch {
+        } catch (e) {
           jsFailures++;
+          if (jsFailures === 1) warnings.push(`Primer fallo en .js (${url}.js): ${(e as Error).message}`);
         }
       }
       const { text } = await getText(url, { retries: 1, accept: 'text/html' });

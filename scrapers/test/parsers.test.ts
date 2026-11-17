@@ -222,6 +222,7 @@ describe('Categoría y duplicados', () => {
         { position: 3, name: 'Colchón Emma Original' },
         { position: 1, name: 'Inicio' },
         { position: 2, name: 'Colchones' },
+        { position: 2.5, name: 'Colchón Emma Original 25 cm' },
       ] },
     ];
     expect(categoryFromBreadcrumbs(nodes, 'Colchón Emma Original')).toBe('Colchones');

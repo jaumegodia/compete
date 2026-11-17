@@ -190,7 +190,11 @@ export function parseProductPage(html: string, pageUrl: string): ScrapedProduct 
 
 const HOME = /^(inicio|home|portada|start)$/i;
 
-/** Categoría a partir de las migas de pan (BreadcrumbList): el último nivel antes del producto. */
+/**
+ * Categoría a partir de las migas de pan (BreadcrumbList): el primer nivel después de "Inicio"
+ * (p. ej. "Colchones"), que es el que sirve para comparar marcas. Los niveles inferiores suelen ser
+ * la gama o el propio producto.
+ */
 export function categoryFromBreadcrumbs(nodes: Json[], productName: string): string | null {
   const bc = nodes.find((n) => hasType(n, 'BreadcrumbList'));
   if (!bc || !Array.isArray(bc.itemListElement)) return null;
@@ -199,7 +203,7 @@ export function categoryFromBreadcrumbs(nodes: Json[], productName: string): str
     .map((i: Json) => String(i.name ?? (typeof i.item === 'object' ? i.item?.name : '') ?? '').trim())
     .filter((n) => n && !HOME.test(n));
   if (names.length && names.at(-1)!.toLowerCase() === productName.trim().toLowerCase()) names.pop();
-  return names.at(-1) ?? null;
+  return names[0] ?? null;
 }
 
 const NON_CATEGORY_SEGMENTS = /^(products?|productos?|p|l|item|shop|tienda|es|en|ca)$/i;
