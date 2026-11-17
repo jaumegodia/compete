@@ -44,7 +44,7 @@ jobs:
       - name: Prueba sin base de datos
         if: github.event_name == 'workflow_dispatch' && inputs.mode == 'dry'
         env:
-          SITES: ${{ inputs.site || 'https://comounamarmota.com https://www.emma-colchon.es https://flex.es https://www.dormideo.com' }}
+          SITES: ${{ inputs.site || 'https://comounamarmota.com https://www.emma-colchon.es https://www.dormideo.com' }}
           MAX_PRODUCTS: '300'
         run: |
           for url in $SITES; do
