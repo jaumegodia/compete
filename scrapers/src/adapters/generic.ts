@@ -219,7 +219,7 @@ function returnDaysOf(product: Json): number | null {
 
 // ---------- Categoría ----------
 
-const HOME = /^(inicio|home|portada|start)$/i;
+const HOME = /^(inicio|home|portada|start|p[aá]gina principal|homepage)$/i;
 
 /**
  * Categoría a partir de las migas de pan (BreadcrumbList): el primer nivel después de "Inicio"
