@@ -180,3 +180,76 @@ describe('Detección de cambios', () => {
     expect(out[0].variants).toHaveLength(1);
   });
 });
+
+describe('Shopify por ficha (.js)', () => {
+  it('mapea /products/{handle}.js con precios en céntimos', async () => {
+    const { mapShopifyJsProduct, productHandles } = await import('../src/adapters/shopify.js');
+    const p = mapShopifyJsProduct(
+      {
+        id: 9,
+        title: 'El Marmota',
+        handle: 'el-marmota',
+        type: 'Colchones',
+        featured_image: '//cdn.shopify.com/m.jpg',
+        options: [{ name: 'Medida', position: 1 }],
+        variants: [
+          { id: 91, title: '90x190', sku: 'M90', price: 29900, compare_at_price: 39900, available: true, option1: '90x190' },
+          { id: 92, title: '135x190', sku: 'M135', price: 44900, compare_at_price: null, available: false, option1: '135x190' },
+        ],
+      },
+      'https://comounamarmota.com',
+    );
+    expect(p).toMatchObject({ externalId: '9', url: 'https://comounamarmota.com/products/el-marmota', category: 'Colchones', imageUrl: 'https://cdn.shopify.com/m.jpg' });
+    expect(p.variants[0]).toMatchObject({ price: 299, compareAtPrice: 399, available: true, options: { Medida: '90x190' } });
+    expect(p.variants[1]).toMatchObject({ price: 449, compareAtPrice: null, available: false });
+    expect(
+      productHandles([
+        'https://x.com/products/a',
+        'https://x.com/collections/c/products/a',
+        'https://x.com/products/b/',
+        'https://x.com/l/regalo-a',
+        'https://x.com/pages/faq',
+      ]),
+    ).toEqual(['a', 'b']);
+  });
+});
+
+describe('Categoría y duplicados', () => {
+  it('saca la categoría de las migas de pan o de la URL', async () => {
+    const { categoryFromBreadcrumbs, categoryFromUrl } = await import('../src/adapters/generic.js');
+    const nodes = [
+      { '@type': 'BreadcrumbList', itemListElement: [
+        { position: 3, name: 'Colchón Emma Original' },
+        { position: 1, name: 'Inicio' },
+        { position: 2, name: 'Colchones' },
+      ] },
+    ];
+    expect(categoryFromBreadcrumbs(nodes, 'Colchón Emma Original')).toBe('Colchones');
+    expect(categoryFromBreadcrumbs([], 'x')).toBeNull();
+    expect(categoryFromUrl('https://www.emma-colchon.es/colchones/colchon-emma-original/original/')).toBe('Colchones');
+    expect(categoryFromUrl('https://www.emma-colchon.es/almohadas-emma/almohada-x/')).toBe('Almohadas emma');
+    expect(categoryFromUrl('https://comounamarmota.com/products/el-marmota')).toBeNull();
+    expect(categoryFromUrl('https://x.com/colchon-x/')).toBeNull();
+  });
+
+  it('se queda con la ficha principal cuando packs o landings repiten SKU', async () => {
+    const { dedupeBySku } = await import('../src/adapters/generic.js');
+    const mk = (url: string, skus: string[]) => ({
+      externalId: url, url, title: 'Colchón Emma Original Pro+', category: null, vendor: null, imageUrl: null, description: null,
+      variants: skus.map((sku) => ({ externalId: sku, title: null, sku, options: null, price: 1, compareAtPrice: null, available: true, currency: 'EUR' })),
+    });
+    const { products, dropped } = dedupeBySku([
+      mk('https://e.es/packs-ahorro/pack-original-pro-plus/', ['A90', 'A135']),
+      mk('https://e.es/colchones/colchon-emma-original-pro/original-pro-plus/', ['A90', 'A135', 'A150']),
+      mk('https://e.es/packs-ahorro/super-pack-original-pro-plus/', ['A150']),
+      mk('https://e.es/almohadas/almohada-x/', ['B1']),
+      mk('https://e.es/almohadas/pack-almohadas-x/', ['B2']), // pack con SKU propio: se mantiene
+    ]);
+    expect(products.map((p) => p.url).sort()).toEqual([
+      'https://e.es/almohadas/almohada-x/',
+      'https://e.es/almohadas/pack-almohadas-x/',
+      'https://e.es/colchones/colchon-emma-original-pro/original-pro-plus/',
+    ]);
+    expect(dropped).toHaveLength(2);
+  });
+});

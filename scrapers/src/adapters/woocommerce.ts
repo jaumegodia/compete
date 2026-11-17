@@ -1,5 +1,5 @@
 import { getJson, parsePrice, sleep } from '../http.js';
-import { stripHtml } from './shopify.js';
+import { stripHtml } from '../text.js';
 import type { Adapter, ScrapedProduct, ScrapedVariant, ScrapeResult } from '../types.js';
 
 // WooCommerce Store API (pública, sin claves): /wp-json/wc/store/v1/products

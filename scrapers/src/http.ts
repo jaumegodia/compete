@@ -59,7 +59,10 @@ export function normalizeBase(url: string): string {
 /** Convierte "1.299,00", "1299.00", 1299 o "129900" (unidades menores) a número. */
 export function parsePrice(value: unknown, minorUnit?: number): number | null {
   if (value === null || value === undefined || value === '') return null;
-  if (typeof value === 'number') return Number.isFinite(value) ? round2(value) : null;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return null;
+    return round2(minorUnit !== undefined ? value / 10 ** minorUnit : value);
+  }
   let s = String(value).replace(/[^\d.,-]/g, '');
   if (!s) return null;
   if (minorUnit !== undefined) {

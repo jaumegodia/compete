@@ -19,9 +19,11 @@ GitHub Actions (cada día 04:17 UTC)
 
 | Plataforma | Cómo se lee | Fiabilidad |
 |---|---|---|
-| **Shopify** | Endpoint público `/products.json` (paginado de 250 en 250) | Muy alta: catálogo completo, variantes, precio tachado y stock |
+| **Shopify** | Endpoint público `/products.json` (paginado de 250 en 250). Si la tienda lo bloquea: URLs `/products/…` del sitemap y `/products/{handle}.js` por ficha | Muy alta: catálogo completo, variantes, precio tachado y stock |
 | **WooCommerce** | Store API pública `/wp-json/wc/store/v1/products` | Alta: los productos variables piden cada variación aparte |
 | **Genérico** | `robots.txt` → sitemaps → cada ficha → datos schema.org (JSON-LD `Product` / `ProductGroup`) | Media: depende de que la web publique bien sus datos estructurados (la mayoría lo hace para Google Shopping) |
+
+En el adaptador genérico, la categoría sale de los datos del producto, de las migas de pan o del primer tramo de la URL. Las páginas de packs o landings que repiten los SKU de otro producto se descartan y se conserva la ficha principal.
 
 Si una web tiene `platform = 'auto'`, se detecta en cada ejecución probando primero Shopify, luego WooCommerce y, si no, el genérico. Cuando se detecta Shopify o WooCommerce se guarda para no repetir la detección.
 

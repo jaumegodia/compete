@@ -1,5 +1,5 @@
 import { getText, parsePrice, sleep } from '../http.js';
-import { stripHtml } from './shopify.js';
+import { stripHtml } from '../text.js';
 import type { Adapter, ScrapedProduct, ScrapedVariant, ScrapeResult } from '../types.js';
 
 /**
@@ -33,7 +33,7 @@ async function discoverSitemaps(baseUrl: string): Promise<string[]> {
   return [`${baseUrl}/sitemap.xml`, `${baseUrl}/sitemap_index.xml`];
 }
 
-async function collectUrls(baseUrl: string, log: (m: string) => void, warnings: string[]): Promise<string[]> {
+export async function collectUrls(baseUrl: string, log: (m: string) => void, warnings: string[]): Promise<string[]> {
   const queue = await discoverSitemaps(baseUrl);
   const seen = new Set<string>();
   const urls = new Set<string>();
@@ -141,7 +141,11 @@ export function parseProductPage(html: string, pageUrl: string): ScrapedProduct 
   const canonical = html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i)?.[1] ?? pageUrl;
   const image = first(product.image);
   const brand = first(product.brand);
-  const category = first(product.category);
+  const ldCategory = first(product.category);
+  const category =
+    (ldCategory ? String(typeof ldCategory === 'object' ? ldCategory.name : ldCategory) : null) ??
+    categoryFromBreadcrumbs(nodes, String(product.name ?? '')) ??
+    categoryFromUrl(canonical);
 
   let variants: ScrapedVariant[] = [];
   if (group && Array.isArray(group.hasVariant)) {
@@ -173,13 +177,83 @@ export function parseProductPage(html: string, pageUrl: string): ScrapedProduct 
     externalId: canonical,
     url: canonical,
     title: String(product.name ?? '').trim() || canonical,
-    category: category ? String(typeof category === 'object' ? category.name : category) : null,
+    category,
     vendor: brand ? String(typeof brand === 'object' ? brand.name : brand) : null,
     imageUrl: image ? String(typeof image === 'object' ? image.url ?? image.contentUrl : image) : null,
     description: stripHtml(product.description ? String(product.description) : null),
     raw: { productGroupID: group?.productGroupID ?? null, sku: product.sku ?? null },
     variants,
   };
+}
+
+// ---------- Categoría ----------
+
+const HOME = /^(inicio|home|portada|start)$/i;
+
+/** Categoría a partir de las migas de pan (BreadcrumbList): el último nivel antes del producto. */
+export function categoryFromBreadcrumbs(nodes: Json[], productName: string): string | null {
+  const bc = nodes.find((n) => hasType(n, 'BreadcrumbList'));
+  if (!bc || !Array.isArray(bc.itemListElement)) return null;
+  const names = [...bc.itemListElement]
+    .sort((a: Json, b: Json) => Number(a.position ?? 0) - Number(b.position ?? 0))
+    .map((i: Json) => String(i.name ?? (typeof i.item === 'object' ? i.item?.name : '') ?? '').trim())
+    .filter((n) => n && !HOME.test(n));
+  if (names.length && names.at(-1)!.toLowerCase() === productName.trim().toLowerCase()) names.pop();
+  return names.at(-1) ?? null;
+}
+
+const NON_CATEGORY_SEGMENTS = /^(products?|productos?|p|l|item|shop|tienda|es|en|ca)$/i;
+
+/** Categoría a partir del primer tramo de la URL: /colchones/colchon-x/ → "Colchones". */
+export function categoryFromUrl(url: string): string | null {
+  try {
+    const segments = new URL(url).pathname.split('/').filter(Boolean);
+    if (segments.length < 2) return null; // /colchon-x/ no dice nada de la categoría
+    const seg = segments[0];
+    if (NON_CATEGORY_SEGMENTS.test(seg)) return null;
+    const text = decodeURIComponent(seg).replace(/[-_]+/g, ' ').trim();
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  } catch {
+    return null;
+  }
+}
+
+// ---------- Duplicados ----------
+
+const SECONDARY_PAGE = /pack|bundle|kit|lote|regalo|gift|oferta|promo|\/l\//i;
+
+/**
+ * Algunas webs publican en páginas de packs o landings los datos del producto principal (mismos SKU).
+ * Se agrupan los productos que comparten algún SKU y se conserva la ficha principal:
+ * la que no parece un pack/landing y, a igualdad, la de URL más corta.
+ */
+export function dedupeBySku(products: ScrapedProduct[]): { products: ScrapedProduct[]; dropped: string[] } {
+  const parent = products.map((_, i) => i);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  const owner = new Map<string, number>();
+  products.forEach((p, i) => {
+    for (const v of p.variants) {
+      if (!v.sku) continue;
+      const j = owner.get(v.sku);
+      if (j === undefined) owner.set(v.sku, i);
+      else parent[find(i)] = find(j);
+    }
+  });
+  const groups = new Map<number, number[]>();
+  products.forEach((_, i) => groups.set(find(i), [...(groups.get(find(i)) ?? []), i]));
+
+  const score = (p: ScrapedProduct) => {
+    const path = new URL(p.url).pathname;
+    return (SECONDARY_PAGE.test(path) ? 10000 : 0) + path.length;
+  };
+  const kept: ScrapedProduct[] = [];
+  const dropped: string[] = [];
+  for (const idx of groups.values()) {
+    const sorted = idx.map((i) => products[i]).sort((a, b) => score(a) - score(b));
+    kept.push(sorted[0]);
+    dropped.push(...sorted.slice(1).map((p) => p.url));
+  }
+  return { products: kept, dropped };
 }
 
 export const genericAdapter: Adapter = {
@@ -205,6 +279,8 @@ export const genericAdapter: Adapter = {
       await sleep(opts.delayMs);
     }
     if (!products.size) warnings.push('No se ha encontrado ningún producto con datos JSON-LD: hará falta un adaptador a medida.');
-    return { platform: 'generic', products: [...products.values()], warnings };
+    const { products: unique, dropped } = dedupeBySku([...products.values()]);
+    if (dropped.length) opts.log(`  generic: ${dropped.length} páginas descartadas por repetir SKU de otro producto (packs, landings)`);
+    return { platform: 'generic', products: unique, warnings };
   },
 };
