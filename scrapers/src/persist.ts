@@ -68,6 +68,8 @@ export async function persistScrape(
       image_url: p.imageUrl,
       description: p.description,
       raw: p.raw ?? null,
+      rating: p.rating ?? null,
+      review_count: p.reviewCount ?? null,
       last_seen_at: now,
       removed_at: null,
     }));

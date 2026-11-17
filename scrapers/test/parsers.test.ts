@@ -254,3 +254,16 @@ describe('Categoría y duplicados', () => {
     expect(dropped).toHaveLength(2);
   });
 });
+
+describe('Valoraciones', () => {
+  it('lee aggregateRating y lo normaliza a 5', async () => {
+    const { ratingOf, parseProductPage } = await import('../src/adapters/generic.js');
+    expect(ratingOf({ aggregateRating: { ratingValue: '4,7', reviewCount: '1532' } })).toEqual({ rating: 4.7, reviewCount: 1532 });
+    expect(ratingOf({ aggregateRating: { ratingValue: 9, bestRating: 10, ratingCount: 20 } })).toEqual({ rating: 4.5, reviewCount: 20 });
+    expect(ratingOf({})).toEqual({ rating: null, reviewCount: null });
+    const html = `<script type="application/ld+json">{"@type":"Product","name":"A","aggregateRating":{"ratingValue":4.8,"reviewCount":321},
+      "offers":{"@type":"Offer","price":10,"hasMerchantReturnPolicy":{"merchantReturnDays":100}}}</script>`;
+    const p = parseProductPage(html, 'https://x.com/a')!;
+    expect(p).toMatchObject({ rating: 4.8, reviewCount: 321, raw: { returnDays: 100 } });
+  });
+});

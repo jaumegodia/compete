@@ -19,6 +19,8 @@ export interface ScrapedProduct {
   vendor: string | null;
   imageUrl: string | null;
   description: string | null;
+  rating?: number | null; // valoración media (0-5)
+  reviewCount?: number | null;
   raw?: unknown;
   variants: ScrapedVariant[];
 }

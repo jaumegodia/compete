@@ -181,9 +181,40 @@ export function parseProductPage(html: string, pageUrl: string): ScrapedProduct 
     vendor: brand ? String(typeof brand === 'object' ? brand.name : brand) : null,
     imageUrl: image ? String(typeof image === 'object' ? image.url ?? image.contentUrl : image) : null,
     description: stripHtml(product.description ? String(product.description) : null),
-    raw: { productGroupID: group?.productGroupID ?? null, sku: product.sku ?? null },
+    rating: ratingOf(product).rating,
+    reviewCount: ratingOf(product).reviewCount,
+    raw: {
+      productGroupID: group?.productGroupID ?? null,
+      sku: product.sku ?? null,
+      returnDays: returnDaysOf(product),
+    },
     variants,
   };
+}
+
+// ---------- Valoraciones y devoluciones ----------
+
+/** Valoración media (normalizada a 0-5) y nº de reseñas desde aggregateRating. */
+export function ratingOf(product: Json): { rating: number | null; reviewCount: number | null } {
+  const r = first(product.aggregateRating) as Json | undefined;
+  if (!r) return { rating: null, reviewCount: null };
+  const value = parsePrice(r.ratingValue);
+  const best = parsePrice(r.bestRating) ?? 5;
+  const count = Number(r.reviewCount ?? r.ratingCount);
+  return {
+    rating: value === null || !best ? null : Math.round((value / best) * 5 * 100) / 100,
+    reviewCount: Number.isFinite(count) ? count : null,
+  };
+}
+
+/** Días de devolución (hasMerchantReturnPolicy.merchantReturnDays) si la web lo publica. */
+function returnDaysOf(product: Json): number | null {
+  for (const o of offersOf(product)) {
+    const policy = first(o.hasMerchantReturnPolicy) as Json | undefined;
+    const days = Number(policy?.merchantReturnDays);
+    if (Number.isFinite(days) && days > 0) return days;
+  }
+  return null;
 }
 
 // ---------- Categoría ----------
