@@ -1,24 +1,35 @@
 import Link from 'next/link';
 import { Badge, BrandDot, Card, Empty, PageHeader, Table, buttonClass, inputClass } from '@/components/ui';
+import { PRODUCT_TYPES, productType, type ProductType } from '@/lib/categories';
 import { db, must } from '@/lib/db';
 import { brandColors, diffPct, money, pct } from '@/lib/format';
 import { getBrands, getCompetitorLinks, getSites } from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
 
-interface Row {
+interface VariantRow {
   id: string;
   size: string;
   current_price: number | null;
   current_compare_at_price: number | null;
   current_available: boolean | null;
-  product: { id: string; title: string; removed_at: string | null; site: { brand_id: string } };
+  product: { id: string; title: string; category: string | null; site: { brand_id: string } };
 }
+type Row = VariantRow & { type: ProductType; brandId: string; price: number };
+
+const ALL = 'todos';
+
+const median = (xs: number[]) => {
+  if (!xs.length) return null;
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+};
 
 export default async function Comparativa({
   searchParams,
 }: {
-  searchParams: Promise<{ marca?: string; medida?: string; q?: string; packs?: string }>;
+  searchParams: Promise<{ marca?: string; tipo?: string; medida?: string; q?: string }>;
 }) {
   const sp = await searchParams;
   const [brands, links, sites] = await Promise.all([getBrands(), getCompetitorLinks(), getSites()]);
@@ -39,66 +50,101 @@ export default async function Comparativa({
   const name = (id: string) => brands.find((b) => b.id === id)?.name ?? '—';
   const siteIds = sites.filter((s) => brandIds.includes(s.brand_id)).map((s) => s.id);
 
-  // Medidas disponibles en tu marca, ordenadas por número de productos que la tienen
-  const sizesRaw = must(
+  // Todas las variantes activas con medida de tu marca y sus competidores (son pocos miles: se filtra en memoria)
+  const raw = must(
     await db()
       .from('variants')
-      .select('size, product:products!inner(id, removed_at, site_id, site:sites(brand_id))')
+      .select(
+        'id, size, current_price, current_compare_at_price, current_available, product:products!inner(id, title, category, removed_at, site_id, site:sites(brand_id))',
+      )
       .not('size', 'is', null)
+      .not('current_price', 'is', null)
       .is('removed_at', null)
       .is('product.removed_at', null)
       .in('product.site_id', siteIds)
       .limit(20000),
-    'sizes',
-  ) as unknown as { size: string; product: { id: string; site: { brand_id: string } } }[];
-  const productsBySize = new Map<string, Set<string>>();
-  const ownSizes = new Set<string>();
-  for (const r of sizesRaw) {
-    if (!productsBySize.has(r.size)) productsBySize.set(r.size, new Set());
-    productsBySize.get(r.size)!.add(r.product.id);
-    if (r.product.site.brand_id === brand.id) ownSizes.add(r.size);
-  }
-  const sizes = [...ownSizes].sort((a, b) => (productsBySize.get(b)?.size ?? 0) - (productsBySize.get(a)?.size ?? 0));
-  const size = sp.medida && productsBySize.has(sp.medida) ? sp.medida : sizes[0];
-  const includePacks = sp.packs === '1';
+    'variants',
+  ) as unknown as VariantRow[];
+  const all: Row[] = raw.map((r) => ({
+    ...r,
+    type: productType(r.product.title, r.product.category),
+    brandId: r.product.site.brand_id,
+    price: Number(r.current_price),
+  }));
+
+  // Tipos en los que tienes productos con medida, con cuántos productos hay en total
+  const productsOf = (rows: Row[]) => new Set(rows.map((r) => r.product.id)).size;
+  const types = PRODUCT_TYPES.filter((t) => t !== 'Otros' && all.some((r) => r.type === t && r.brandId === brand.id));
+  const defaultType: string = types.includes('Colchones') ? 'Colchones' : (types[0] ?? ALL);
+  const tipo = sp.tipo === ALL || types.includes(sp.tipo as ProductType) ? (sp.tipo as string) : defaultType;
+  const ofType = tipo === ALL ? all : all.filter((r) => r.type === tipo);
+
+  // Medidas que tienes en ese tipo, ordenadas por número de productos (tuyos y de la competencia)
+  const bySize = new Map<string, Row[]>();
+  for (const r of ofType) bySize.set(r.size, [...(bySize.get(r.size) ?? []), r]);
+  const sizes = [...bySize.keys()]
+    .filter((s) => bySize.get(s)!.some((r) => r.brandId === brand.id))
+    .sort((a, b) => productsOf(bySize.get(b)!) - productsOf(bySize.get(a)!) || a.localeCompare(b, 'es', { numeric: true }));
+  const size = sp.medida && sizes.includes(sp.medida) ? sp.medida : sizes[0];
   const q = (sp.q ?? '').trim().toLowerCase();
 
-  const rows = size
-    ? (must(
-        await db()
-          .from('variants')
-          .select('id, size, current_price, current_compare_at_price, current_available, product:products!inner(id, title, removed_at, site_id, site:sites(brand_id))')
-          .eq('size', size)
-          .is('removed_at', null)
-          .is('product.removed_at', null)
-          .in('product.site_id', siteIds)
-          .limit(5000),
-        'rows',
-      ) as unknown as Row[])
-    : [];
-
-  // Una fila por producto: la variante más barata de esa medida
+  // Una fila por producto: su variante más barata en esa medida
   const byProduct = new Map<string, Row>();
-  for (const r of rows) {
-    if (r.current_price === null) continue;
-    if (!includePacks && /\bpack\b/i.test(r.product.title)) continue;
+  for (const r of size ? bySize.get(size)! : []) {
     if (q && !r.product.title.toLowerCase().includes(q)) continue;
     const cur = byProduct.get(r.product.id);
-    if (!cur || Number(r.current_price) < Number(cur.current_price)) byProduct.set(r.product.id, r);
+    if (!cur || r.price < cur.price) byProduct.set(r.product.id, r);
   }
-  const list = [...byProduct.values()].sort((a, b) => Number(a.current_price) - Number(b.current_price));
-  const max = Math.max(1, ...list.map((r) => Number(r.current_compare_at_price ?? r.current_price)));
-  const ownRows = list.filter((r) => r.product.site.brand_id === brand.id);
+  const list = [...byProduct.values()].sort((a, b) => a.price - b.price);
+  const max = Math.max(1, ...list.map((r) => Number(r.current_compare_at_price ?? r.price)));
+  const ownRows = list.filter((r) => r.brandId === brand.id);
 
-  // Para cada producto de la competencia, el producto propio más cercano en precio
-  const nearestOwn = (price: number) =>
-    ownRows.reduce<Row | null>((best, r) => (!best || Math.abs(Number(r.current_price) - price) < Math.abs(Number(best.current_price) - price) ? r : best), null);
+  // Tu producto más cercano en precio, siempre del mismo tipo
+  const nearestOwn = (r: Row) =>
+    ownRows
+      .filter((o) => o.type === r.type)
+      .reduce<Row | null>((best, o) => (!best || Math.abs(o.price - r.price) < Math.abs(best.price - r.price) ? o : best), null);
+
+  // Resumen por marca en este tipo y medida
+  const ownMedian = median(ownRows.map((r) => r.price));
+  const summary = brandIds
+    .map((id) => {
+      const prices = list.filter((r) => r.brandId === id).map((r) => r.price);
+      return { id, n: prices.length, min: prices.length ? Math.min(...prices) : null, med: median(prices) };
+    })
+    .filter((s) => s.n);
+
+  const href = (params: Record<string, string | undefined>) => {
+    const u = new URLSearchParams();
+    const merged = { marca: own.length > 1 ? brand.id : undefined, tipo, medida: size, q: sp.q, ...params };
+    for (const [k, v] of Object.entries(merged)) if (v) u.set(k, v);
+    return `/comparativa?${u}`;
+  };
+  const typeLabel = tipo === ALL ? 'todos los tipos' : tipo.toLowerCase();
 
   return (
     <>
-      <PageHeader title="Comparativa de precios" subtitle={`${brand.name} frente a ${brandIds.length - 1} competidores, en la misma medida`} />
+      <PageHeader
+        title="Comparativa de precios"
+        subtitle={`${brand.name} frente a ${brandIds.length - 1} competidores: mismo tipo de producto y misma medida`}
+      />
 
       <Card className="mb-4">
+        <div className="mb-4 flex flex-wrap gap-2">
+          {[...types, ALL].map((t) => {
+            const n = productsOf(t === ALL ? all : all.filter((r) => r.type === t));
+            const active = t === tipo;
+            return (
+              <Link
+                key={t}
+                href={href({ tipo: t, medida: undefined })}
+                className={`rounded-full border px-3 py-1 text-sm ${active ? 'border-accent bg-accent text-white' : 'border-line text-ink-2 hover:border-ink-3'}`}
+              >
+                {t === ALL ? 'Todos' : t} <span className={active ? 'opacity-80' : 'text-ink-3'}>{n}</span>
+              </Link>
+            );
+          })}
+        </div>
         <form className="flex flex-wrap items-end gap-3">
           {own.length > 1 && (
             <label className="flex flex-col gap-1 text-xs text-ink-2">
@@ -112,91 +158,118 @@ export default async function Comparativa({
               </select>
             </label>
           )}
+          <input type="hidden" name="tipo" value={tipo} />
           <label className="flex flex-col gap-1 text-xs text-ink-2">
             Medida
             <select name="medida" defaultValue={size} className={inputClass}>
               {sizes.map((s) => (
                 <option key={s} value={s}>
-                  {s} ({productsBySize.get(s)?.size} productos)
+                  {s} ({productsOf(bySize.get(s)!)} productos)
                 </option>
               ))}
             </select>
           </label>
           <label className="flex flex-col gap-1 text-xs text-ink-2">
             Producto contiene
-            <input name="q" defaultValue={sp.q ?? ''} placeholder="colchón, almohada…" className={inputClass} />
-          </label>
-          <label className="flex items-center gap-2 pb-2 text-sm text-ink-2">
-            <input type="checkbox" name="packs" value="1" defaultChecked={includePacks} /> Incluir packs
+            <input name="q" defaultValue={sp.q ?? ''} placeholder="híbrido, visco…" className={inputClass} />
           </label>
           <button className={buttonClass}>Comparar</button>
-          <div className="ml-auto flex flex-wrap gap-3 pb-2 text-xs text-ink-2">
-            {brandIds.filter((id) => list.some((r) => r.product.site.brand_id === id)).map((id) => (
-              <span key={id} className="inline-flex items-center gap-1.5">
-                <BrandDot color={colors[id]} />
-                {name(id)}
-              </span>
-            ))}
-          </div>
         </form>
       </Card>
 
-      <Card title={size ? `Precio actual en ${size} · ${list.length} productos, de más barato a más caro` : 'Comparativa'}>
+      {summary.length > 0 && (
+        <Card className="mb-4" title={`Resumen: ${typeLabel} en ${size}`}>
+          <Table>
+            <thead>
+              <tr>
+                <th>Marca</th>
+                <th className="text-right">Productos</th>
+                <th className="text-right">Desde</th>
+                <th className="text-right">Precio mediano</th>
+                <th className="text-right">Mediana frente a la tuya</th>
+              </tr>
+            </thead>
+            <tbody>
+              {summary.map((s) => {
+                const isOwn = s.id === brand.id;
+                const d = !isOwn && s.med !== null && ownMedian !== null ? diffPct(s.med, ownMedian) : null;
+                return (
+                  <tr key={s.id} className={isOwn ? 'bg-[#eef4fc]' : ''}>
+                    <td className="whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1.5">
+                        <BrandDot color={colors[s.id]} />
+                        {name(s.id)}
+                      </span>
+                    </td>
+                    <td className="num text-right">{s.n}</td>
+                    <td className="num text-right">{money(s.min)}</td>
+                    <td className="num text-right font-medium">{money(s.med)}</td>
+                    <td className="num text-right text-ink-2">
+                      {isOwn ? <Badge tone="accent">Tu marca</Badge> : d === null ? '—' : `${d > 0 ? '+' : ''}${pct(d, 1)}`}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </Table>
+        </Card>
+      )}
+
+      <Card title={size ? `${tipo === ALL ? 'Todos los productos' : tipo} en ${size} · ${list.length} productos, de más barato a más caro` : 'Comparativa'}>
         {!list.length ? (
-          <Empty>No hay productos con esta medida y estos filtros.</Empty>
+          <Empty>No hay productos de este tipo con esta medida y estos filtros.</Empty>
         ) : (
           <Table>
             <thead>
               <tr>
                 <th>Marca</th>
                 <th>Producto</th>
-                <th className="w-[34%]">Precio</th>
+                <th className="w-[30%]">Precio</th>
                 <th className="text-right">Tachado</th>
-                <th className="text-right">Frente a tu producto más cercano</th>
+                <th className="text-right">Frente a tu {tipo === ALL ? 'producto del mismo tipo' : 'producto'} más cercano</th>
               </tr>
             </thead>
             <tbody>
               {list.map((r) => {
-                const bId = r.product.site.brand_id;
-                const isOwn = bId === brand.id;
-                const price = Number(r.current_price);
+                const isOwn = r.brandId === brand.id;
                 const compare = r.current_compare_at_price === null ? null : Number(r.current_compare_at_price);
-                const near = isOwn ? null : nearestOwn(price);
-                const d = near ? diffPct(price, Number(near.current_price)) : null;
+                const near = isOwn ? null : nearestOwn(r);
+                const d = near ? diffPct(r.price, near.price) : null;
                 return (
                   <tr key={r.id} className={isOwn ? 'bg-[#eef4fc]' : ''}>
                     <td className="whitespace-nowrap">
                       <span className="inline-flex items-center gap-1.5">
-                        <BrandDot color={colors[bId]} />
-                        {name(bId)}
+                        <BrandDot color={colors[r.brandId]} />
+                        {name(r.brandId)}
                       </span>
                     </td>
                     <td className="max-w-xs">
                       <Link href={`/productos/${r.product.id}?v=${r.id}`} className="text-accent hover:underline">
                         {r.product.title}
                       </Link>
+                      {tipo === ALL && <div className="text-xs text-ink-3">{r.type}</div>}
                       {r.current_available === false && <span className="ml-2"><Badge tone="bad">Sin stock</Badge></span>}
                     </td>
                     <td>
-                      <div className="flex items-center gap-2" title={`${money(price)}${compare ? ` · antes ${money(compare)}` : ''}`}>
+                      <div className="flex items-center gap-2" title={`${money(r.price)}${compare ? ` · antes ${money(compare)}` : ''}`}>
                         <div className="relative h-3 flex-1">
                           {compare && <div className="absolute inset-y-0 left-0 rounded-r border border-dashed border-ink-3" style={{ width: `${(100 * compare) / max}%` }} />}
-                          <div className="absolute inset-y-0 left-0 rounded-r" style={{ width: `${(100 * price) / max}%`, background: colors[bId] }} />
+                          <div className="absolute inset-y-0 left-0 rounded-r" style={{ width: `${(100 * r.price) / max}%`, background: colors[r.brandId] }} />
                         </div>
-                        <span className="num w-20 text-right font-medium">{money(price)}</span>
+                        <span className="num w-20 text-right font-medium">{money(r.price)}</span>
                       </div>
                     </td>
-                    <td className="num text-right text-ink-2">{compare ? `${money(compare)} (−${pct((100 * (compare - price)) / compare)})` : '—'}</td>
+                    <td className="num text-right text-ink-2">{compare ? `${money(compare)} (−${pct((100 * (compare - r.price)) / compare)})` : '—'}</td>
                     <td className="num text-right text-ink-2">
-                      {near ? (
+                      {isOwn ? (
+                        <Badge tone="accent">Tu producto</Badge>
+                      ) : near ? (
                         <span title={near.product.title}>
                           {d !== null && d > 0 ? '+' : ''}
                           {pct(d, 1)} vs {near.product.title.length > 28 ? `${near.product.title.slice(0, 28)}…` : near.product.title}
                         </span>
-                      ) : isOwn ? (
-                        <Badge tone="accent">Tu producto</Badge>
                       ) : (
-                        '—'
+                        <span className="text-ink-3">Sin producto tuyo de este tipo</span>
                       )}
                     </td>
                   </tr>
@@ -206,8 +279,9 @@ export default async function Comparativa({
           </Table>
         )}
         <p className="mt-3 text-xs text-ink-3">
-          La barra muestra el precio de venta; el contorno discontinuo, el precio tachado si la web lo publica. La comparación con
-          &quot;tu producto más cercano&quot; es por precio, no por características.
+          El tipo de producto se deduce del nombre y de la categoría que publica cada web. La barra muestra el precio de venta; el
+          contorno discontinuo, el precio tachado si la web lo publica. &quot;Tu producto más cercano&quot; es el tuyo del mismo tipo
+          con el precio más parecido, no por características.
         </p>
       </Card>
     </>

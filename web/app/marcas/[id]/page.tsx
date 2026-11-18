@@ -4,6 +4,7 @@ import { Badge, BrandDot, Card, Empty, PageHeader, Stat, Table, buttonClass, inp
 import { db, must } from '@/lib/db';
 import { brandColors, date, money, num, pct } from '@/lib/format';
 import { getBrands } from '@/lib/queries';
+import { PRODUCT_TYPES, productType } from '@/lib/categories';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,24 +31,23 @@ export default async function BrandCatalog({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ q?: string; cat?: string; retirados?: string }>;
+  searchParams: Promise<{ q?: string; tipo?: string; retirados?: string }>;
 }) {
-  const [{ id }, { q = '', cat = '', retirados }] = await Promise.all([params, searchParams]);
+  const [{ id }, { q = '', tipo = '', retirados }] = await Promise.all([params, searchParams]);
   const brands = await getBrands();
   const brand = brands.find((b) => b.id === id);
   if (!brand) notFound();
   const colors = brandColors(brands);
 
-  const all = must(
-    await db().from('v_product_summary').select('*').eq('brand_id', id).order('title'),
-    'products',
-  ) as ProductSummary[];
+  const all = (
+    must(await db().from('v_product_summary').select('*').eq('brand_id', id).order('title'), 'products') as ProductSummary[]
+  ).map((p) => ({ ...p, type: productType(p.title, p.category) }));
   const active = all.filter((p) => !p.removed_at);
   const removed = all.filter((p) => p.removed_at);
-  const categories = [...new Set(active.map((p) => p.category).filter(Boolean))].sort() as string[];
+  const types = PRODUCT_TYPES.filter((t) => active.some((p) => p.type === t));
   const needle = q.trim().toLowerCase();
   const shown = (retirados ? removed : active).filter(
-    (p) => (!needle || p.title.toLowerCase().includes(needle)) && (!cat || p.category === cat),
+    (p) => (!needle || p.title.toLowerCase().includes(needle)) && (!tipo || p.type === tipo),
   );
   // "Nuevo": aparecido en los últimos 7 días, pero no en la primera captura de la marca (que es el punto de partida)
   const weekAgo = Date.now() - 7 * 864e5;
@@ -87,11 +87,11 @@ export default async function BrandCatalog({
       <Card>
         <form className="mb-4 flex flex-wrap gap-2">
           <input name="q" defaultValue={q} placeholder="Buscar producto" className={`${inputClass} w-64`} />
-          <select name="cat" defaultValue={cat} className={inputClass}>
-            <option value="">Todas las categorías</option>
-            {categories.map((c) => (
-              <option key={c} value={c}>
-                {c}
+          <select name="tipo" defaultValue={tipo} className={inputClass}>
+            <option value="">Todos los tipos</option>
+            {types.map((t) => (
+              <option key={t} value={t}>
+                {t} ({active.filter((p) => p.type === t).length})
               </option>
             ))}
           </select>
@@ -108,7 +108,8 @@ export default async function BrandCatalog({
             <thead>
               <tr>
                 <th>Producto</th>
-                <th>Categoría</th>
+                <th>Tipo</th>
+                <th>Categoría en la web</th>
                 <th className="text-right">Variantes</th>
                 <th className="text-right">Precio</th>
                 <th className="text-right">Tachado</th>
@@ -126,6 +127,7 @@ export default async function BrandCatalog({
                     {isNew(p) && <span className="ml-2"><Badge tone="accent">Nuevo</Badge></span>}
                     {p.removed_at && <div className="text-xs text-ink-3">Retirado el {date(p.removed_at)}</div>}
                   </td>
+                  <td className="whitespace-nowrap">{p.type}</td>
                   <td className="text-ink-2">{p.category ?? '—'}</td>
                   <td className="num text-right">{num(p.variants)}</td>
                   <td className="num whitespace-nowrap text-right">

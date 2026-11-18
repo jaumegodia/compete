@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { EventsTable } from '@/components/events';
 import { PriceChart, type PricePoint } from '@/components/price-chart';
 import { Badge, BrandDot, Card, PageHeader, Table } from '@/components/ui';
+import { productType } from '@/lib/categories';
 import { db, must } from '@/lib/db';
 import { brandColors, date, money, num, pct } from '@/lib/format';
 import { getBrands, type EventRow } from '@/lib/queries';
@@ -92,7 +93,8 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
                 {brand.name}
               </Link>
             )}
-            {product.category && <span>· {product.category}</span>}
+            <span>· {productType(product.title, product.category)}</span>
+            {product.category && <span className="text-ink-3">({product.category} en la web)</span>}
             <span>· visto por primera vez el {date(product.first_seen_at)}</span>
             {product.removed_at && <Badge tone="bad">Retirado el {date(product.removed_at)}</Badge>}
           </span>
