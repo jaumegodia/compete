@@ -62,3 +62,9 @@ describe('promoChanged', () => {
     expect(promoChanged(row, { ...row, campaigns: [] })).toBe(true);
   });
 });
+
+describe('falsos positivos', () => {
+  it('ignora porcentajes de eficacia de producto', () => {
+    expect(analyzeMessage('–9,2% de profundidad de arrugas en 8 semanas: certificado', 'promo-block')).toBeNull();
+  });
+});

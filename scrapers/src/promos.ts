@@ -53,7 +53,7 @@ const CAMPAIGNS: [RegExp, string][] = [
 ];
 
 const FINANCING = /(tae|tin|inter[eé]s|intereses|financ|cuotas|meses|aplazad)/i;
-const NOT_DISCOUNT = /(algod[oó]n|lana|l[aá]tex|natural|reciclad|org[aá]nic|satisfac|clientes|valoraci|opiniones|recomienda|humedad|transpirab|garant)/i;
+const NOT_DISCOUNT = /(arrugas|piel|antioxidant|profundidad|reduc|mejora|eficacia|testad|algod[oó]n|lana|l[aá]tex|natural|reciclad|org[aá]nic|satisfac|clientes|valoraci|opiniones|recomienda|humedad|transpirab|garant)/i;
 
 export const normalizeSpace = (s: string) => s.replace(/\s+/g, ' ').trim();
 
