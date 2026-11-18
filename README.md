@@ -7,12 +7,13 @@ Este repositorio contiene, de momento, la **captura diaria de catálogos** de la
 ## Cómo funciona la captura
 
 ```
-GitHub Actions (cada día 04:17 UTC)
+GitHub Actions (cada día 04:17 UTC, con respaldo a las 09:47 UTC)
   └─ npm run scrape
        ├─ lee las webs activas de la tabla `sites`
        ├─ detecta la plataforma de cada web y usa su adaptador
        ├─ guarda productos, variantes y el precio del día
-       └─ compara con el último precio guardado y crea `events`
+       ├─ compara con el último precio guardado y crea `events`
+       └─ lee las promociones de la home y las guarda en `site_promotions`
 ```
 
 ### Adaptadores
@@ -29,9 +30,18 @@ Si una web tiene `platform = 'auto'`, se detecta en cada ejecución probando pri
 
 Si el genérico no encuentra productos, la ejecución queda en `scrape_runs` con estado `error` y el aviso de que hace falta un adaptador a medida (`scrapers/src/adapters/`).
 
+### Promociones de la home
+
+Con la Directiva Ómnibus muchas marcas no publican precios tachados, pero sí anuncian su descuento en la home. Cada día se lee la home de cada web y se guarda en `site_promotions`:
+
+- los mensajes de las barras de anuncio, topbars, banners, cabecera y titulares del hero;
+- el **descuento principal** (el mayor % de los bloques de promoción, indicando si es "hasta"), los **códigos**, las **campañas** (Black Friday, Rebajas…) y si hay **envío gratis**.
+
+Se descartan los porcentajes de financiación ("0% TAE") y de composición ("100% algodón"). Si la topbar se pinta con JavaScript, se buscan los textos en los datos de la página. Cuando cambia la promoción respecto a la captura anterior se crea un evento `promo_change`.
+
 ### Eventos que se detectan
 
-`new_product`, `removed_product`, `price_change`, `discount_start`, `discount_end`, `out_of_stock`, `back_in_stock`.
+`new_product`, `removed_product`, `price_change`, `discount_start`, `discount_end`, `out_of_stock`, `back_in_stock`, `promo_change`.
 
 - La primera captura de una web no genera eventos: solo crea el punto de partida.
 - Si una captura trae menos de la mitad de los productos activos (bloqueo, caída de la web…), **no** se marca nada como retirado y queda un aviso en `scrape_runs`.
@@ -47,6 +57,7 @@ Migraciones en `supabase/migrations/`, datos del piloto en `supabase/seed.sql`.
 | `products`, `variants` | Catálogo, con `first_seen_at`, `last_seen_at` y `removed_at` |
 | `price_snapshots` | Un registro diario por variante: precio, precio tachado y disponibilidad |
 | `scrape_runs` | Cada ejecución: estado, nº de productos, errores |
+| `site_promotions` | Promoción comunicada en la home cada día: descuento principal, códigos, campañas, envío gratis y mensajes |
 | `events` | Cambios detectados (alimentan alertas y resumen semanal) |
 
 RLS está activado en todas las tablas y todavía sin políticas: solo el scraper (con la clave `service_role`) puede leer y escribir. Las políticas para usuarios se añadirán con el frontend.
@@ -59,6 +70,7 @@ RLS está activado en todas las tablas y todavía sin políticas: solo el scrape
 2. **Actions → Captura diaria de catálogos → Run workflow**
    - `dry`: prueba las 4 webs sin tocar la base de datos y deja el resultado como artefacto `capturas`.
    - `full`: captura y guarda en Supabase.
+   - `promos`: prueba solo las promociones de la home, sin tocar la base de datos.
 
 ### En local
 

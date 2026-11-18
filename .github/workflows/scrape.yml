@@ -3,12 +3,13 @@ name: Captura diaria de catálogos
 on:
   schedule:
     - cron: '17 4 * * *' # cada día a las 04:17 UTC (05:17 en Madrid en invierno)
+    - cron: '47 9 * * *' # respaldo a las 09:47 UTC por si GitHub retrasa o se salta la primera (repetir el mismo día no duplica datos)
   workflow_dispatch:
     inputs:
       mode:
-        description: 'full = guarda en Supabase · dry = solo prueba, sin base de datos'
+        description: 'full = guarda en Supabase · dry = solo prueba, sin base de datos · promos = solo promociones de la home, sin base de datos'
         type: choice
-        options: [full, dry]
+        options: [full, dry, promos]
         default: full
       site:
         description: 'Filtrar por texto de la URL (vacío = todas). En modo dry, URLs separadas por espacios.'
@@ -49,6 +50,15 @@ jobs:
         run: |
           for url in $SITES; do
             npm run scrape:dry -- --url "$url" || echo "::warning::Fallo en $url"
+          done
+
+      - name: Prueba de promociones de la home (sin base de datos)
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'promos'
+        env:
+          SITES: ${{ inputs.site || 'https://comounamarmota.com https://www.emma-colchon.es https://www.dormideo.com' }}
+        run: |
+          for url in $SITES; do
+            npm run scrape:dry -- --url "$url" --promos-only || echo "::warning::Fallo en $url"
           done
 
       - uses: actions/upload-artifact@v4

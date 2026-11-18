@@ -2,7 +2,8 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { adapters, detectPlatform } from './adapters/index.js';
 import { getDb, must } from './db.js';
 import { normalizeBase } from './http.js';
-import { persistScrape } from './persist.js';
+import { persistPromos, persistScrape } from './persist.js';
+import { scrapePromos, type PromoSnapshot } from './promos.js';
 import type { Platform, ScrapeOptions } from './types.js';
 
 /**
@@ -32,8 +33,23 @@ async function scrapeUrl(baseUrl: string, platform: Platform | 'auto') {
   return adapters[resolved].scrape(baseUrl, opts);
 }
 
+function logPromos(p: PromoSnapshot) {
+  const main = p.mainDiscountPct === null ? 'sin descuento detectado' : `${p.upTo ? 'hasta ' : ''}${p.mainDiscountPct}%`;
+  console.log(`  promoción home: ${main}` +
+    (p.campaigns.length ? ` · campaña: ${p.campaigns.join(', ')}` : '') +
+    (p.codes.length ? ` · códigos: ${p.codes.join(', ')}` : '') +
+    (p.freeShipping ? ' · envío gratis' : ''));
+  p.messages.slice(0, 8).forEach((m) => console.log(`    [${m.source}] ${m.text}`));
+}
+
 async function dryRun(url: string) {
   const base = normalizeBase(url);
+  if (flag('promos-only')) {
+    const promos = await scrapePromos(base);
+    console.log(`→ ${base}`);
+    logPromos(promos);
+    return;
+  }
   const result = await scrapeUrl(base, (value('platform') as Platform) ?? 'auto');
   const variants = result.products.reduce((n, p) => n + p.variants.length, 0);
   console.log(`\n${result.products.length} productos, ${variants} variantes (${result.platform})`);
@@ -42,9 +58,16 @@ async function dryRun(url: string) {
     const v = p.variants[0];
     console.log(`  - ${p.title} · ${p.variants.length} variantes · desde ${v?.price ?? '?'} ${v?.currency ?? ''}`);
   }
+  let promos: PromoSnapshot | null = null;
+  try {
+    promos = await scrapePromos(base);
+    logPromos(promos);
+  } catch (e) {
+    console.warn(`  aviso: promociones de la home: ${(e as Error).message}`);
+  }
   await mkdir('out', { recursive: true });
   const file = `out/${new URL(base).host}.json`;
-  await writeFile(file, JSON.stringify(result, null, 2));
+  await writeFile(file, JSON.stringify({ ...result, promos }, null, 2));
   console.log(`\nResultado completo en ${file}`);
 }
 
@@ -94,8 +117,11 @@ async function main() {
         .eq('id', run.id);
       await db
         .from('sites')
-        .update({ last_scraped_at: new Date().toISOString(), // Solo se fija la plataforma cuando se detecta una API (genérico se vuelve a comprobar cada día)
-          ...(site.platform === 'auto' && result.platform !== 'generic' ? { platform: result.platform } : {}) })
+        .update({
+          last_scraped_at: new Date().toISOString(),
+          // Solo se fija la plataforma cuando se detecta una API (genérico se vuelve a comprobar cada día)
+          ...(site.platform === 'auto' && result.platform !== 'generic' ? { platform: result.platform } : {}),
+        })
         .eq('id', site.id);
     } catch (e) {
       failures++;
@@ -106,9 +132,21 @@ async function main() {
         .update({ status: 'error', finished_at: new Date().toISOString(), error: msg.slice(0, 2000) })
         .eq('id', run.id);
     }
+    await capturePromos(db, site.id, run.id, base);
   }
   console.log(`\nTerminado: ${sites.length - failures}/${sites.length} webs OK.`);
   if (failures === sites.length) process.exitCode = 1;
+}
+
+/** Las promociones de la home se capturan aunque falle el catálogo, y sus errores no paran la ejecución. */
+async function capturePromos(db: ReturnType<typeof getDb>, siteId: string, runId: string, base: string) {
+  try {
+    const promos = await scrapePromos(base);
+    logPromos(promos);
+    if (await persistPromos(db, siteId, runId, promos)) console.log('  ¡cambio de promoción en la home!');
+  } catch (e) {
+    console.warn(`  aviso: promociones de la home: ${(e as Error).message}`);
+  }
 }
 
 main().catch((e) => {

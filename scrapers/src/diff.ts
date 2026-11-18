@@ -15,7 +15,8 @@ export type EventType =
   | 'discount_start'
   | 'discount_end'
   | 'out_of_stock'
-  | 'back_in_stock';
+  | 'back_in_stock'
+  | 'promo_change';
 
 export interface EventDraft {
   type: EventType;

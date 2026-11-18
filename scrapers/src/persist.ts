@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { chunk, fetchAll, must } from './db.js';
 import { computeVariantEvents, safeToMarkRemoved, type EventDraft, type Snapshot } from './diff.js';
+import type { PromoSnapshot } from './promos.js';
 import type { ScrapedProduct, ScrapeResult } from './types.js';
 
 interface SiteRow {
@@ -183,4 +184,81 @@ export async function persistScrape(
 function minPrice(p: ScrapedProduct): number | null {
   const prices = p.variants.map((v) => v.price).filter((x): x is number => x !== null);
   return prices.length ? Math.min(...prices) : null;
+}
+
+// ---------- Promociones de la home ----------
+
+interface PromoRow {
+  main_discount_pct: number | string | null;
+  up_to: boolean;
+  codes: string[];
+  campaigns: string[];
+  free_shipping: boolean;
+}
+
+const promoKey = (p: PromoRow) =>
+  JSON.stringify([
+    p.main_discount_pct === null ? null : Number(p.main_discount_pct),
+    p.up_to,
+    [...p.codes].sort(),
+    [...p.campaigns].sort(),
+    p.free_shipping,
+  ]);
+
+/** ¿Ha cambiado la promoción comunicada respecto a la última captura? */
+export function promoChanged(prev: PromoRow | null, curr: PromoRow): boolean {
+  return prev !== null && promoKey(prev) !== promoKey(curr);
+}
+
+/** Guarda la promoción del día y crea un evento promo_change si es distinta de la anterior. */
+export async function persistPromos(
+  db: SupabaseClient,
+  siteId: string,
+  runId: string | null,
+  promo: PromoSnapshot,
+): Promise<boolean> {
+  const prev = must(
+    await db
+      .from('site_promotions')
+      .select('main_discount_pct, up_to, codes, campaigns, free_shipping')
+      .eq('site_id', siteId)
+      .order('captured_on', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    'select site_promotions',
+  ) as PromoRow | null;
+
+  const row: PromoRow = {
+    main_discount_pct: promo.mainDiscountPct,
+    up_to: promo.upTo,
+    codes: promo.codes,
+    campaigns: promo.campaigns,
+    free_shipping: promo.freeShipping,
+  };
+  must(
+    await db.from('site_promotions').upsert(
+      {
+        site_id: siteId,
+        captured_on: new Date().toISOString().slice(0, 10),
+        captured_at: new Date().toISOString(),
+        page_url: promo.pageUrl,
+        messages: promo.messages,
+        ...row,
+      },
+      { onConflict: 'site_id,captured_on' },
+    ),
+    'upsert site_promotions',
+  );
+  if (!promoChanged(prev, row)) return false;
+  must(
+    await db.from('events').insert({
+      site_id: siteId,
+      run_id: runId,
+      type: 'promo_change',
+      old_value: prev,
+      new_value: { ...row, messages: promo.messages.slice(0, 5).map((m) => m.text) },
+    }),
+    'insert promo event',
+  );
+  return true;
 }
