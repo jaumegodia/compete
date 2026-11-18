@@ -4,7 +4,7 @@ import { EventsTable } from '@/components/events';
 import { PriceChart, type PricePoint } from '@/components/price-chart';
 import { Badge, BrandDot, Card, PageHeader, Table } from '@/components/ui';
 import { productType } from '@/lib/categories';
-import { db, must } from '@/lib/db';
+import { db, fetchAll, must } from '@/lib/db';
 import { brandColors, date, money, num, pct } from '@/lib/format';
 import { getBrands, type EventRow } from '@/lib/queries';
 
@@ -61,15 +61,17 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
   // Histórico: la variante elegida o, por defecto, el precio mínimo del producto cada día
   const ids = chosen ? [chosen.id] : activeVariants.map((x) => x.id);
   const snapshots = ids.length
-    ? (must(
-        await db()
-          .from('price_snapshots')
-          .select('variant_id, captured_on, price, compare_at_price')
-          .in('variant_id', ids.slice(0, 300))
-          .order('captured_on')
-          .limit(20000),
+    ? ((await fetchAll(
+        (from, to) =>
+          db()
+            .from('price_snapshots')
+            .select('variant_id, captured_on, price, compare_at_price')
+            .in('variant_id', ids.slice(0, 300))
+            .order('captured_on')
+            .order('variant_id')
+            .range(from, to),
         'snapshots',
-      ) as { variant_id: string; captured_on: string; price: number | null; compare_at_price: number | null }[])
+      )) as { variant_id: string; captured_on: string; price: number | null; compare_at_price: number | null }[])
     : [];
   const byDay = new Map<string, PricePoint>();
   for (const s of snapshots) {

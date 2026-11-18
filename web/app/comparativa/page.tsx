@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Badge, BrandDot, Card, Empty, PageHeader, Table, buttonClass, inputClass } from '@/components/ui';
 import { PRODUCT_TYPES, productType, type ProductType } from '@/lib/categories';
-import { db, must } from '@/lib/db';
+import { db, fetchAll } from '@/lib/db';
 import { brandColors, diffPct, money, pct } from '@/lib/format';
 import { getBrands, getCompetitorLinks, getSites } from '@/lib/queries';
 
@@ -52,8 +52,9 @@ export default async function Comparativa({
   const siteIds = sites.filter((s) => brandIds.includes(s.brand_id)).map((s) => s.id);
 
   // Todas las variantes activas de tu marca y sus competidores (son pocos miles: se filtra en memoria)
-  const raw = must(
-    await db()
+  const raw = (await fetchAll(
+    (from, to) =>
+      db()
       .from('variants')
       .select(
         'id, size, current_price, current_compare_at_price, current_available, product:products!inner(id, title, category, removed_at, site_id, site:sites(brand_id))',
@@ -62,9 +63,10 @@ export default async function Comparativa({
       .is('removed_at', null)
       .is('product.removed_at', null)
       .in('product.site_id', siteIds)
-      .limit(20000),
+      .order('id')
+      .range(from, to),
     'variants',
-  ) as unknown as VariantRow[];
+  )) as unknown as VariantRow[];
   const all: Row[] = raw.map((r) => ({
     ...r,
     type: productType(r.product.title, r.product.category),

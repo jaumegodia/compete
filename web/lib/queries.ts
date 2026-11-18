@@ -1,5 +1,5 @@
 import 'server-only';
-import { db, must } from './db';
+import { db, fetchAll, must } from './db';
 
 export interface BrandSummary {
   id: string;
@@ -68,16 +68,19 @@ const EVENT_SELECT =
 
 /** Eventos entre dos instantes (ISO), más recientes primero. */
 export async function getEvents(fromIso: string, toIso: string, limit = 2000): Promise<EventRow[]> {
-  return must(
-    await db()
-      .from('events')
-      .select(EVENT_SELECT)
-      .gte('detected_at', fromIso)
-      .lt('detected_at', toIso)
-      .order('detected_at', { ascending: false })
-      .limit(limit),
+  return (await fetchAll(
+    (from, to) =>
+      db()
+        .from('events')
+        .select(EVENT_SELECT)
+        .gte('detected_at', fromIso)
+        .lt('detected_at', toIso)
+        .order('detected_at', { ascending: false })
+        .order('id')
+        .range(from, to),
     'events',
-  ) as unknown as EventRow[];
+    limit,
+  )) as unknown as EventRow[];
 }
 
 export interface RunRow {
