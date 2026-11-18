@@ -29,7 +29,7 @@ npm run dev                   # http://localhost:3000
 Variables:
 
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`: la clave secreta solo se usa en el servidor; nunca llega al navegador.
-- `DASHBOARD_PASSWORD` (opcional): si la defines, el navegador pide usuario y contraseña (vale cualquier usuario). Recomendable si publicas el panel en internet.
+- `DASHBOARD_PASSWORD`: el navegador pide usuario y contraseña (vale cualquier usuario). Opcional en local (`npm run dev`); en producción es obligatoria y sin ella el panel responde 503.
 - `GITHUB_TOKEN` (opcional): token con permiso *Actions: write* sobre el repositorio para lanzar capturas desde el panel. `GITHUB_REPO` por defecto es `jaumegodia/compete`.
 
 ## Despliegue
