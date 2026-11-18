@@ -1,68 +1,63 @@
--- Panel (MVP): marca propia, último precio en la variante y vistas de lectura
+-- Panel (MVP): marca propia y primera versión de las vistas de lectura (aplicada el 18 nov 2026).
+-- La migración 20261118110000 las sustituye por versiones más rápidas.
 
 alter table public.brands add column is_own boolean not null default false;
 update public.brands set is_own = true where id in (select brand_id from public.brand_competitors);
 
--- Último precio conocido de cada variante (lo actualiza el scraper) para no recorrer el histórico al leer
-alter table public.variants
-  add column current_price numeric(12,2),
-  add column current_compare_at_price numeric(12,2),
-  add column current_available boolean,
-  add column current_captured_on date,
-  add column size text generated always as (
-    nullif(
-      coalesce(substring(lower(coalesce(title, '') || ' ' || coalesce(options::text, '')) from '(\d{2,3})\s*[x×]\s*\d{2,3}'), '')
-      || 'x' ||
-      coalesce(substring(lower(coalesce(title, '') || ' ' || coalesce(options::text, '')) from '\d{2,3}\s*[x×]\s*(\d{2,3})'), ''),
-      'x')
-  ) stored;
+create view public.v_variant_current with (security_invoker = true) as
+with last as (
+  select v.product_id, max(ps.captured_on) as d
+  from public.variants v join public.price_snapshots ps on ps.variant_id = v.id
+  group by v.product_id
+)
+select
+  v.id as variant_id, v.product_id, p.site_id, s.brand_id, b.name as brand, b.is_own,
+  p.title as product_title, p.category, p.url, v.title as variant_title, v.sku, v.options,
+  nullif(
+    substring(lower(coalesce(v.title, '') || ' ' || coalesce(v.options::text, '')) from '(\d{2,3})\s*[x×]\s*\d{2,3}')
+    || 'x' ||
+    substring(lower(coalesce(v.title, '') || ' ' || coalesce(v.options::text, '')) from '\d{2,3}\s*[x×]\s*(\d{2,3})'),
+    'x') as size,
+  ps.captured_on, ps.price, ps.compare_at_price, ps.available, ps.currency
+from public.variants v
+join public.products p on p.id = v.product_id and p.removed_at is null
+join public.sites s on s.id = p.site_id
+join public.brands b on b.id = s.brand_id
+join last l on l.product_id = p.id
+join public.price_snapshots ps on ps.variant_id = v.id and ps.captured_on = l.d
+where v.removed_at is null;
 
-update public.variants v set
-  current_price = ps.price, current_compare_at_price = ps.compare_at_price,
-  current_available = ps.available, current_captured_on = ps.captured_on
-from (
-  select distinct on (variant_id) variant_id, price, compare_at_price, available, captured_on
-  from public.price_snapshots order by variant_id, captured_on desc
-) ps where ps.variant_id = v.id;
-
-create index on public.variants (size);
-
--- Resumen por producto (precios actuales de sus variantes activas)
 create view public.v_product_summary with (security_invoker = true) as
 select
   p.id, p.site_id, s.brand_id, b.name as brand, b.is_own, p.title, p.url, p.category, p.image_url,
   p.rating, p.review_count, p.first_seen_at, p.last_seen_at, p.removed_at,
-  max(v.current_captured_on) as captured_on,
-  count(v.id) as variants,
-  min(v.current_price) as min_price,
-  max(v.current_price) as max_price,
-  count(v.id) filter (where v.current_compare_at_price is not null) as discounted_variants,
-  max(round(100 * (v.current_compare_at_price - v.current_price) / nullif(v.current_compare_at_price, 0), 1)) as max_discount_pct,
-  count(v.id) filter (where v.current_available = false) as out_of_stock_variants
+  max(vc.captured_on) as captured_on,
+  count(vc.variant_id) as variants,
+  min(vc.price) as min_price,
+  max(vc.price) as max_price,
+  count(*) filter (where vc.compare_at_price is not null) as discounted_variants,
+  max(round(100 * (vc.compare_at_price - vc.price) / nullif(vc.compare_at_price, 0), 1)) as max_discount_pct,
+  count(*) filter (where vc.available = false) as out_of_stock_variants
 from public.products p
 join public.sites s on s.id = p.site_id
 join public.brands b on b.id = s.brand_id
-left join public.variants v on v.product_id = p.id and v.removed_at is null
+left join public.v_variant_current vc on vc.product_id = p.id
 group by p.id, s.brand_id, b.name, b.is_own;
 
--- Resumen por marca: catálogo actual, última promoción de la home y última captura
 create view public.v_brand_summary with (security_invoker = true) as
-with cat as (
-  select brand_id, count(*) as products, sum(variants) as variants, sum(discounted_variants) as discounted_variants,
-         sum(out_of_stock_variants) as out_of_stock_variants, round(avg(rating), 2) as avg_rating, sum(review_count) as reviews
-  from public.v_product_summary where removed_at is null group by brand_id
-)
 select
   b.id, b.name, b.is_own, b.created_at,
   (select count(*) from public.sites s where s.brand_id = b.id) as sites,
   (select count(*) from public.sites s where s.brand_id = b.id and s.active) as active_sites,
-  coalesce(cat.products, 0) as products, coalesce(cat.variants, 0) as variants,
-  coalesce(cat.discounted_variants, 0) as discounted_variants, coalesce(cat.out_of_stock_variants, 0) as out_of_stock_variants,
-  cat.avg_rating, cat.reviews,
+  (select count(*) from public.v_product_summary ps where ps.brand_id = b.id and ps.removed_at is null) as products,
+  (select coalesce(sum(variants), 0) from public.v_product_summary ps where ps.brand_id = b.id and ps.removed_at is null) as variants,
+  (select coalesce(sum(discounted_variants), 0) from public.v_product_summary ps where ps.brand_id = b.id and ps.removed_at is null) as discounted_variants,
+  (select coalesce(sum(out_of_stock_variants), 0) from public.v_product_summary ps where ps.brand_id = b.id and ps.removed_at is null) as out_of_stock_variants,
+  (select round(avg(rating), 2) from public.products p join public.sites s on s.id = p.site_id where s.brand_id = b.id and p.removed_at is null) as avg_rating,
+  (select sum(review_count) from public.products p join public.sites s on s.id = p.site_id where s.brand_id = b.id and p.removed_at is null) as reviews,
   promo.captured_on as promo_date, promo.main_discount_pct, promo.up_to, promo.campaigns, promo.codes, promo.free_shipping,
   run.started_at as last_run_at, run.status as last_run_status
 from public.brands b
-left join cat on cat.brand_id = b.id
 left join lateral (
   select sp.* from public.site_promotions sp join public.sites s on s.id = sp.site_id
   where s.brand_id = b.id order by sp.captured_on desc limit 1

@@ -118,6 +118,11 @@ export async function persistScrape(
       options: v.options,
       last_seen_at: now,
       removed_at: null,
+      // Último precio conocido (el panel lo lee sin recorrer el histórico)
+      current_price: v.price,
+      current_compare_at_price: v.compareAtPrice,
+      current_available: v.available,
+      current_captured_on: today,
     }));
     const data = must(
       await db.from('variants').upsert(rows, { onConflict: 'product_id,external_id' }).select('id, product_id, external_id'),

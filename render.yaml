@@ -1,0 +1,26 @@
+# Blueprint de Render para el panel (web/). Las claves se rellenan en Render, no aquí.
+services:
+  - type: web
+    name: compete-panel
+    runtime: node
+    region: frankfurt
+    plan: starter
+    rootDir: web
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      - key: SUPABASE_URL
+        value: https://ltddtuycbonkgwaxsfgm.supabase.co
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: DASHBOARD_PASSWORD
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GITHUB_REPO
+        value: jaumegodia/compete
