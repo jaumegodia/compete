@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --color-surface: #fcfcfb;
+  --color-ink: #0b0b0b;
+  --color-ink-2: #52514e;
+  --color-ink-3: #8a8a85;
+  --color-line: #e6e5e1;
+  --color-accent: #2a78d6;
+  --color-good: #0f7b3d;
+  --color-bad: #c2362f;
+  --color-warn: #a86400;
+}
+
+html { background: #f4f4f2; color: var(--color-ink); }
+body { font-feature-settings: "tnum" 1; }
+.num { font-variant-numeric: tabular-nums; }

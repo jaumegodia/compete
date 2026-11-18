@@ -2,7 +2,7 @@
 
 Inteligencia competitiva para e-commerce: catálogo, precios y promociones de tu marca frente a tus competidores.
 
-Este repositorio contiene, de momento, la **captura diaria de catálogos** de las webs propias de cada marca y el esquema de base de datos en Supabase. El frontend (Next.js + Supabase) vendrá después.
+Este repositorio contiene la **captura diaria de catálogos y promociones** de las webs de cada marca (`scrapers/`), el esquema de base de datos en Supabase (`supabase/`) y el **panel** para gestionarlo y ver los resultados (`web/`, ver [web/README.md](web/README.md)).
 
 ## Cómo funciona la captura
 
