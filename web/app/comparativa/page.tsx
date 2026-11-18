@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 
 interface VariantRow {
   id: string;
-  size: string;
+  size: string | null;
   current_price: number | null;
   current_compare_at_price: number | null;
   current_available: boolean | null;
@@ -18,6 +18,7 @@ interface VariantRow {
 type Row = VariantRow & { type: ProductType; brandId: string; price: number };
 
 const ALL = 'todos';
+const ANY_SIZE = 'todas';
 
 const median = (xs: number[]) => {
   if (!xs.length) return null;
@@ -50,14 +51,13 @@ export default async function Comparativa({
   const name = (id: string) => brands.find((b) => b.id === id)?.name ?? '—';
   const siteIds = sites.filter((s) => brandIds.includes(s.brand_id)).map((s) => s.id);
 
-  // Todas las variantes activas con medida de tu marca y sus competidores (son pocos miles: se filtra en memoria)
+  // Todas las variantes activas de tu marca y sus competidores (son pocos miles: se filtra en memoria)
   const raw = must(
     await db()
       .from('variants')
       .select(
         'id, size, current_price, current_compare_at_price, current_available, product:products!inner(id, title, category, removed_at, site_id, site:sites(brand_id))',
       )
-      .not('size', 'is', null)
       .not('current_price', 'is', null)
       .is('removed_at', null)
       .is('product.removed_at', null)
@@ -72,7 +72,7 @@ export default async function Comparativa({
     price: Number(r.current_price),
   }));
 
-  // Tipos en los que tienes productos con medida, con cuántos productos hay en total
+  // Tipos en los que tienes productos, con cuántos productos hay en total
   const productsOf = (rows: Row[]) => new Set(rows.map((r) => r.product.id)).size;
   const types = PRODUCT_TYPES.filter((t) => t !== 'Otros' && all.some((r) => r.type === t && r.brandId === brand.id));
   const defaultType: string = types.includes('Colchones') ? 'Colchones' : (types[0] ?? ALL);
@@ -81,16 +81,20 @@ export default async function Comparativa({
 
   // Medidas que tienes en ese tipo, ordenadas por número de productos (tuyos y de la competencia)
   const bySize = new Map<string, Row[]>();
-  for (const r of ofType) bySize.set(r.size, [...(bySize.get(r.size) ?? []), r]);
+  for (const r of ofType) if (r.size) bySize.set(r.size, [...(bySize.get(r.size) ?? []), r]);
   const sizes = [...bySize.keys()]
     .filter((s) => bySize.get(s)!.some((r) => r.brandId === brand.id))
     .sort((a, b) => productsOf(bySize.get(b)!) - productsOf(bySize.get(a)!) || a.localeCompare(b, 'es', { numeric: true }));
-  const size = sp.medida && sizes.includes(sp.medida) ? sp.medida : sizes[0];
+  // Por defecto, la medida con más productos si en ella hay competencia; si no (almohadas, sofás…), todas las medidas
+  const competed = (s: string) => bySize.get(s)!.some((r) => r.brandId !== brand.id);
+  const size = sp.medida === ANY_SIZE || (sp.medida && sizes.includes(sp.medida)) ? sp.medida : sizes.find(competed) ?? ANY_SIZE;
+  const anySize = size === ANY_SIZE;
+  const sizeLabel = anySize ? 'todas las medidas' : size;
   const q = (sp.q ?? '').trim().toLowerCase();
 
-  // Una fila por producto: su variante más barata en esa medida
+  // Una fila por producto: su variante más barata en esa medida (o en cualquiera)
   const byProduct = new Map<string, Row>();
-  for (const r of size ? bySize.get(size)! : []) {
+  for (const r of anySize ? ofType : (bySize.get(size) ?? [])) {
     if (q && !r.product.title.toLowerCase().includes(q)) continue;
     const cur = byProduct.get(r.product.id);
     if (!cur || r.price < cur.price) byProduct.set(r.product.id, r);
@@ -162,6 +166,7 @@ export default async function Comparativa({
           <label className="flex flex-col gap-1 text-xs text-ink-2">
             Medida
             <select name="medida" defaultValue={size} className={inputClass}>
+              <option value={ANY_SIZE}>Todas las medidas ({productsOf(ofType)} productos)</option>
               {sizes.map((s) => (
                 <option key={s} value={s}>
                   {s} ({productsOf(bySize.get(s)!)} productos)
@@ -178,7 +183,7 @@ export default async function Comparativa({
       </Card>
 
       {summary.length > 0 && (
-        <Card className="mb-4" title={`Resumen: ${typeLabel} en ${size}`}>
+        <Card className="mb-4" title={`Resumen: ${typeLabel} en ${sizeLabel}`}>
           <Table>
             <thead>
               <tr>
@@ -215,7 +220,7 @@ export default async function Comparativa({
         </Card>
       )}
 
-      <Card title={size ? `${tipo === ALL ? 'Todos los productos' : tipo} en ${size} · ${list.length} productos, de más barato a más caro` : 'Comparativa'}>
+      <Card title={`${tipo === ALL ? 'Todos los productos' : tipo} en ${sizeLabel} · ${list.length} productos, de más barato a más caro`}>
         {!list.length ? (
           <Empty>No hay productos de este tipo con esta medida y estos filtros.</Empty>
         ) : (
@@ -247,7 +252,9 @@ export default async function Comparativa({
                       <Link href={`/productos/${r.product.id}?v=${r.id}`} className="text-accent hover:underline">
                         {r.product.title}
                       </Link>
-                      {tipo === ALL && <div className="text-xs text-ink-3">{r.type}</div>}
+                      {(tipo === ALL || anySize) && (
+                        <div className="text-xs text-ink-3">{[tipo === ALL ? r.type : null, anySize ? (r.size ?? 'sin medida') : null].filter(Boolean).join(' · ')}</div>
+                      )}
                       {r.current_available === false && <span className="ml-2"><Badge tone="bad">Sin stock</Badge></span>}
                     </td>
                     <td>
@@ -280,7 +287,8 @@ export default async function Comparativa({
         )}
         <p className="mt-3 text-xs text-ink-3">
           El tipo de producto se deduce del nombre y de la categoría que publica cada web. La barra muestra el precio de venta; el
-          contorno discontinuo, el precio tachado si la web lo publica. &quot;Tu producto más cercano&quot; es el tuyo del mismo tipo
+          contorno discontinuo, el precio tachado si la web lo publica. Con &quot;todas las medidas&quot; se toma la variante más barata
+          de cada producto, así que solo es orientativo. &quot;Tu producto más cercano&quot; es el tuyo del mismo tipo
           con el precio más parecido, no por características.
         </p>
       </Card>
