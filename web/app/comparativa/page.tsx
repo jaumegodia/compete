@@ -89,7 +89,10 @@ export default async function Comparativa({
     .sort((a, b) => productsOf(bySize.get(b)!) - productsOf(bySize.get(a)!) || a.localeCompare(b, 'es', { numeric: true }));
   // Por defecto, la medida con más productos si en ella hay competencia; si no (almohadas, sofás…), todas las medidas
   const competed = (s: string) => bySize.get(s)!.some((r) => r.brandId !== brand.id);
-  const size = sp.medida === ANY_SIZE || (sp.medida && sizes.includes(sp.medida)) ? sp.medida : sizes.find(competed) ?? ANY_SIZE;
+  // y si esa medida reúne al menos la mitad de los productos del tipo (en almohadas cada web mide distinto)
+  const best = sizes.find(competed);
+  const defaultSize = best && productsOf(bySize.get(best)!) * 2 >= productsOf(ofType) ? best : ANY_SIZE;
+  const size = sp.medida === ANY_SIZE || (sp.medida && sizes.includes(sp.medida)) ? sp.medida : defaultSize;
   const anySize = size === ANY_SIZE;
   const sizeLabel = anySize ? 'todas las medidas' : size;
   const q = (sp.q ?? '').trim().toLowerCase();
@@ -151,7 +154,8 @@ export default async function Comparativa({
             );
           })}
         </div>
-        <form className="flex flex-wrap items-end gap-3">
+        {/* key: al navegar entre pestañas el formulario se vuelve a crear y muestra la medida real */}
+        <form key={`${brand.id}|${tipo}|${size}|${sp.q ?? ''}`} className="flex flex-wrap items-end gap-3">
           {own.length > 1 && (
             <label className="flex flex-col gap-1 text-xs text-ink-2">
               Marca
