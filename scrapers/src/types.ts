@@ -29,6 +29,10 @@ export interface ScrapeResult {
   platform: Platform;
   products: ScrapedProduct[];
   warnings: string[];
+  /** Datos de diagnóstico de la ejecución (sitemaps, códigos HTTP, recuentos); se guardan en scrape_runs.diagnostics. */
+  diagnostics?: Record<string, unknown>;
+  /** Motivo concreto cuando no se han obtenido productos. */
+  error?: string;
 }
 
 export interface Adapter {
@@ -40,4 +44,6 @@ export interface ScrapeOptions {
   maxProducts: number; // límite de seguridad
   delayMs: number; // pausa entre peticiones a la misma web
   log: (msg: string) => void;
+  /** Expresiones regulares (sobre la ruta de la URL) para quedarse solo con algunas fichas (sites.include_url_patterns). */
+  includeUrlPatterns?: string[] | null;
 }

@@ -5,9 +5,18 @@ const USER_AGENT =
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export class HttpError extends Error {
-  constructor(public status: number, public url: string) {
-    super(`HTTP ${status} en ${url}`);
+  constructor(public status: number, public url: string, public blockedBy: string | null = null) {
+    super(`HTTP ${status} en ${url}${blockedBy ? ` (protección anti-bots: ${blockedBy})` : ''}`);
   }
+}
+
+/** Detecta respuestas de desafío anti-bots (Cloudflare "Just a moment…", etc.) por sus cabeceras. */
+function blockedByOf(res: Response): string | null {
+  if (res.status !== 403 && res.status !== 503 && res.status !== 429) return null;
+  if (res.headers.get('cf-mitigated') || /cloudflare/i.test(res.headers.get('server') ?? '')) return 'Cloudflare';
+  if (res.headers.get('x-datadome') || /datadome/i.test(res.headers.get('server') ?? '')) return 'DataDome';
+  if (/akamai/i.test(res.headers.get('server') ?? '')) return 'Akamai';
+  return null;
 }
 
 /** GET con timeout y reintentos (429 y 5xx). Devuelve el texto de la respuesta. */
@@ -29,7 +38,7 @@ export async function getText(
         lastErr = new HttpError(res.status, url);
         continue;
       }
-      if (!res.ok) throw new HttpError(res.status, url);
+      if (!res.ok) throw new HttpError(res.status, url, blockedByOf(res));
       return {
         text: await res.text(),
         status: res.status,
