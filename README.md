@@ -28,6 +28,13 @@ En el adaptador genérico:
 
 - **Sitemaps**: se toleran prólogos rotos (`<?phpxml …?>`) y comentarios. En un índice se siguen primero los hijos de producto (`product`, `producto`…) y solo si no dan URLs se miran los demás. Las URLs con pinta de ficha (`/products/…`, `/producto/…`, `…-p-123`, `/123-x.html`) se visitan antes que el resto.
 - **Filtro por web**: `sites.include_url_patterns` es una lista de expresiones regulares (sin distinguir mayúsculas) que se comparan con la ruta de cada URL. Si hay alguna, solo se visitan las fichas que encajan. Por ejemplo, Maxcolchón tiene `^/colchon[^/]*-c-\d+/` para quedarse con los colchones.
+
+  | Web | `include_url_patterns` | Para qué |
+  |---|---|---|
+  | Maxcolchón | `^/colchon[^/]*-c-\d+/` | Solo colchones (la web vende también sábanas, bases, cabeceros…) |
+  | Emma | `^/(colchones\|almohadas[^/]*\|camas\|toppers\|complementos\|packs-ahorro)/[^/]+` | Todo el catálogo, sin blog ni landings: la captura pasa de 761 a 640 páginas y de ~23 a ~14 min |
+
+  Se cambia con `update sites set include_url_patterns = array['…'] where base_url = '…';`. Antes de poner un filtro, comprueba que encaja con las URLs de los productos ya guardados (`select url from products where site_id = …`): si una ficha deja de pasar el filtro, se marcará como retirada.
 - **JSON-LD**: solo cuentan los bloques cuyo `@type` es o incluye `Product`/`ProductGroup` (se ignoran los `ImageObject` de productos relacionados). Con un `AggregateOffer` sin precio por medida se guarda una variante «Desde» con `lowPrice`, y `lowPrice`/`highPrice` quedan en `products.raw.priceRange`. `highPrice` nunca se toma como precio tachado. `aggregateRating` va a `products.rating` y `products.review_count`.
 - La categoría sale de los datos del producto, de las migas de pan o del primer tramo de la URL. Las páginas de packs o landings que repiten los SKU de otro producto se descartan y se conserva la ficha principal.
 
