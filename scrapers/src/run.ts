@@ -27,10 +27,11 @@ const opts: ScrapeOptions = {
   log: (m) => console.log(m),
 };
 
-async function scrapeUrl(baseUrl: string, platform: Platform | 'auto') {
+async function scrapeUrl(baseUrl: string, platform: Platform | 'auto', includeUrlPatterns?: string[] | null) {
   const resolved = platform === 'auto' ? await detectPlatform(baseUrl) : platform;
   opts.log(`→ ${baseUrl} (${resolved}${platform === 'auto' ? ', detectada' : ''})`);
-  return adapters[resolved].scrape(baseUrl, opts);
+  if (includeUrlPatterns?.length) opts.log(`  filtro de URLs: ${includeUrlPatterns.join(' | ')}`);
+  return adapters[resolved].scrape(baseUrl, { ...opts, includeUrlPatterns });
 }
 
 function logPromos(p: PromoSnapshot) {
@@ -50,7 +51,10 @@ async function dryRun(url: string) {
     logPromos(promos);
     return;
   }
-  const result = await scrapeUrl(base, (value('platform') as Platform) ?? 'auto');
+  const include = value('include');
+  const result = await scrapeUrl(base, (value('platform') as Platform) ?? 'auto', include ? include.split(',') : null);
+  if (result.error) console.warn(`  ERROR: ${result.error}`);
+  if (result.diagnostics) console.log(`  diagnóstico: ${JSON.stringify(result.diagnostics)}`);
   const variants = result.products.reduce((n, p) => n + p.variants.length, 0);
   console.log(`\n${result.products.length} productos, ${variants} variantes (${result.platform})`);
   result.warnings.slice(0, 10).forEach((w) => console.warn(`  aviso: ${w}`));
@@ -79,7 +83,7 @@ async function main() {
   }
 
   const db = getDb();
-  let query = db.from('sites').select('id, base_url, platform, currency').eq('active', true);
+  let query = db.from('sites').select('id, base_url, platform, currency, include_url_patterns').eq('active', true);
   const only = value('site');
   if (only) query = query.ilike('base_url', `%${only}%`);
   const sites = must(await query, 'select sites') as {
@@ -87,6 +91,7 @@ async function main() {
     base_url: string;
     platform: Platform | 'auto';
     currency: string;
+    include_url_patterns: string[] | null;
   }[];
   if (!sites.length) return console.log('No hay webs activas que capturar.');
 
@@ -97,9 +102,16 @@ async function main() {
       await db.from('scrape_runs').insert({ site_id: site.id }).select('id').single(),
       'insert scrape_run',
     ) as { id: string };
+    let diagnostics: Record<string, unknown> | null = null;
     try {
-      const result = await scrapeUrl(base, site.platform);
-      if (!result.products.length) throw new Error(result.warnings.at(-1) ?? 'La captura no ha devuelto productos.');
+      const result = await scrapeUrl(base, site.platform, site.include_url_patterns);
+      diagnostics = result.diagnostics ?? null;
+      if (!result.products.length) {
+        const detail = result.warnings.filter((w) => w !== result.error).slice(0, 3);
+        throw new Error(
+          (result.error ?? 'La captura no ha devuelto productos.') + (detail.length ? ` · Detalle: ${detail.join(' | ')}` : ''),
+        );
+      }
       const saved = await persistScrape(db, site, run.id, result, opts.log);
       const warnings = [...result.warnings, ...saved.warnings];
       warnings.slice(0, 5).forEach((w) => console.warn(`  aviso: ${w}`));
@@ -113,6 +125,7 @@ async function main() {
           variants_found: saved.variants,
           events_created: saved.events,
           error: warnings.length ? `${warnings.length} avisos: ${warnings.slice(0, 3).join(' | ')}` : null,
+          diagnostics,
         })
         .eq('id', run.id);
       await db
@@ -129,7 +142,7 @@ async function main() {
       console.error(`  ERROR en ${base}: ${msg}`);
       await db
         .from('scrape_runs')
-        .update({ status: 'error', finished_at: new Date().toISOString(), error: msg.slice(0, 2000) })
+        .update({ status: 'error', finished_at: new Date().toISOString(), error: msg.slice(0, 2000), diagnostics })
         .eq('id', run.id);
     }
     await capturePromos(db, site.id, run.id, base);

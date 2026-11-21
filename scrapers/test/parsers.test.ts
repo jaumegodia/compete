@@ -1,7 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mapShopifyProduct } from '../src/adapters/shopify.js';
 import { mapWooProduct } from '../src/adapters/woocommerce.js';
-import { extractLocs, isSitemapIndex, parseProductPage } from '../src/adapters/generic.js';
+import {
+  collectUrls,
+  extractLocs,
+  genericFailure,
+  isLikelyProductUrl,
+  isSitemapIndex,
+  matchesInclude,
+  compilePatterns,
+  parseProductPage,
+  type SitemapStats,
+} from '../src/adapters/generic.js';
 import { computeVariantEvents, discountPct, safeToMarkRemoved } from '../src/diff.js';
 import { dedupe } from '../src/persist.js';
 import { normalizeBase, parsePrice } from '../src/http.js';
@@ -265,5 +275,129 @@ describe('Valoraciones', () => {
       "offers":{"@type":"Offer","price":10,"hasMerchantReturnPolicy":{"merchantReturnDays":100}}}</script>`;
     const p = parseProductPage(html, 'https://x.com/a')!;
     expect(p).toMatchObject({ rating: 4.8, reviewCount: 321, raw: { returnDays: 100 } });
+  });
+});
+
+describe('Genérico: sitemaps osCommerce con prólogo roto (Maxcolchón)', () => {
+  const index = `<?phpxml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap><loc>https://www.mx.com/contenido.xml</loc></sitemap>
+  <sitemap><loc>https://www.mx.com/productos.xml</loc></sitemap>
+  <sitemap><loc>https://www.mx.com/listados.xml</loc></sitemap>
+</sitemapindex>`;
+  const productos = `<?xml version="1.0" encoding="UTF-8"?><urlset>
+  <url><loc>https://www.mx.com/colchones-viscoelasticos-c-12/colchon-viscoelastico-confort-p-101</loc></url>
+  <url><loc>https://www.mx.com/colchones-c-1/colchon-muelles-ensacados-p-202</loc></url>
+  <url><loc>https://www.mx.com/sabanas-c-33/juego-de-sabanas-5050-lisos-bies-p-512</loc></url>
+  <url><loc>https://www.mx.com/camas-nido-c-27/base-tapizada-canguro-p-770</loc></url>
+</urlset>`;
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('tolera la instrucción de procesamiento rota y lee el índice', () => {
+    expect(isSitemapIndex(index)).toBe(true);
+    expect(extractLocs(index)).toHaveLength(3);
+  });
+
+  it('reconoce fichas -p-123 y filtra por patrones de la web', () => {
+    expect(isLikelyProductUrl('https://www.mx.com/sabanas-c-33/juego-p-512')).toBe(true);
+    expect(isLikelyProductUrl('https://www.mx.com/sabanas-c-33/')).toBe(false);
+    expect(isLikelyProductUrl('https://x.com/products/colchon')).toBe(true);
+    const include = compilePatterns(['^/colchones[^/]*-c-\\d+/']);
+    expect(matchesInclude('https://www.mx.com/colchones-c-1/colchon-p-202', include)).toBe(true);
+    expect(matchesInclude('https://www.mx.com/colchones-viscoelasticos-c-12/x-p-101', include)).toBe(true);
+    expect(matchesInclude('https://www.mx.com/sabanas-c-33/juego-p-512', include)).toBe(false);
+    expect(matchesInclude('https://www.mx.com/sabanas-c-33/juego-p-512', [])).toBe(true);
+  });
+
+  it('sigue primero el sitemap de productos y aplica el filtro de la web', async () => {
+    const requested: string[] = [];
+    vi.stubGlobal('fetch', async (url: string) => {
+      requested.push(url);
+      const body = url.endsWith('/sitemap.xml') ? index : url.endsWith('/productos.xml') ? productos : null;
+      return new Response(body ?? 'no', { status: body ? 200 : 404, headers: { 'content-type': 'application/xml' } });
+    });
+    const stats: SitemapStats = {
+      robotsStatus: null, sitemaps: [], childSitemaps: 0, urlsFound: 0, urlsAfterFilter: 0, urlsLikelyProduct: 0, blockedBy: null,
+    };
+    const urls = await collectUrls('https://www.mx.com', () => {}, [], {
+      includeUrlPatterns: ['^/colchones[^/]*-c-\\d+/'],
+      stats,
+    });
+    expect(urls).toEqual([
+      'https://www.mx.com/colchones-viscoelasticos-c-12/colchon-viscoelastico-confort-p-101',
+      'https://www.mx.com/colchones-c-1/colchon-muelles-ensacados-p-202',
+    ]);
+    expect(requested).not.toContain('https://www.mx.com/contenido.xml'); // el de productos ya ha dado URLs
+    expect(stats).toMatchObject({ robotsStatus: 404, childSitemaps: 3, urlsFound: 4, urlsAfterFilter: 2, urlsLikelyProduct: 2 });
+  });
+
+  it('detecta el bloqueo de Cloudflare y lo explica', async () => {
+    vi.stubGlobal('fetch', async () =>
+      new Response('<title>Just a moment...</title>', { status: 403, headers: { server: 'cloudflare', 'cf-mitigated': 'challenge' } }),
+    );
+    const warnings: string[] = [];
+    const stats: SitemapStats = {
+      robotsStatus: null, sitemaps: [], childSitemaps: 0, urlsFound: 0, urlsAfterFilter: 0, urlsLikelyProduct: 0, blockedBy: null,
+    };
+    expect(await collectUrls('https://www.mx.com', () => {}, warnings, { stats })).toEqual([]);
+    expect(stats.blockedBy).toBe('Cloudflare');
+    expect(stats.robotsStatus).toBe(403);
+    const msg = genericFailure({ ...stats, pagesVisited: 0, htmlPages: 0, pagesWithoutProduct: 0, blockedPages: 0 });
+    expect(msg).toMatch(/anti-bots \(Cloudflare\).*HTTP 403/);
+  });
+
+  it('distingue 0 URLs en el sitemap, 0 tras filtrar y fichas sin JSON-LD', () => {
+    const base = { sitemaps: [{ url: 's', status: 200 }], blockedBy: null, pagesVisited: 0, htmlPages: 0, pagesWithoutProduct: 0, blockedPages: 0 };
+    expect(genericFailure({ ...base, urlsFound: 0, urlsAfterFilter: 0 })).toMatch(/^0 URLs de ficha en el sitemap \(/);
+    expect(genericFailure({ ...base, urlsFound: 400, urlsAfterFilter: 0 }, ['^/colchones'])).toMatch(/tras filtrar.*\^\/colchones/);
+    expect(genericFailure({ ...base, urlsFound: 400, urlsAfterFilter: 50, pagesVisited: 50, htmlPages: 50, pagesWithoutProduct: 50 })).toMatch(
+      /^Fichas sin JSON-LD Product: 50\/50/,
+    );
+  });
+});
+
+describe('Genérico: ficha con AggregateOffer e ImageObject (Maxcolchón)', () => {
+  const ld = (o: unknown) => `<script type="application/ld+json">${JSON.stringify(o)}</script>`;
+  const related = Array.from({ length: 15 }, (_, i) =>
+    ld({ '@context': 'https://schema.org', '@type': 'ImageObject', name: `Otro producto ${i}`, contentUrl: `https://img/${i}.jpg` }),
+  ).join('\n');
+  const html = `<html><head><link rel="canonical" href="https://www.mx.com/colchones-c-1/colchon-muelles-ensacados-p-202">
+    ${ld({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Inicio' }, { '@type': 'ListItem', position: 2, name: 'Colchones' },
+      { '@type': 'ListItem', position: 3, name: 'Colchón Muelles Ensacados' }] })}
+    ${related}
+    ${ld({ '@context': 'https://schema.org', '@type': 'Product', name: 'Colchón Muelles Ensacados', productId: '202',
+      url: 'https://www.mx.com/colchones-c-1/colchon-muelles-ensacados-p-202', category: 'Colchones',
+      image: 'https://img/202.jpg', brand: { '@type': 'Brand', name: 'Maxcolchón' },
+      aggregateRating: { '@type': 'AggregateRating', ratingValue: '4.7', ratingCount: '120', reviewCount: '98' },
+      offers: { '@type': 'AggregateOffer', lowPrice: '219.00', highPrice: '459.00', priceCurrency: 'EUR',
+        offers: { '@type': ['Offer', 'PriceSpecification'], price: null, availability: 'https://schema.org/InStock', priceValidUntil: '2026-12-31' } } })}
+    ${ld({ '@context': 'https://schema.org', '@type': 'Organization', name: 'Maxcolchón' })}
+  </head></html>`;
+
+  it('usa el bloque Product, guarda el precio «desde», highPrice y la valoración', () => {
+    const p = parseProductPage(html, 'https://www.mx.com/colchones-c-1/colchon-muelles-ensacados-p-202')!;
+    expect(p).toMatchObject({
+      title: 'Colchón Muelles Ensacados',
+      category: 'Colchones',
+      vendor: 'Maxcolchón',
+      imageUrl: 'https://img/202.jpg',
+      rating: 4.7,
+      reviewCount: 98,
+    });
+    expect(p.variants).toEqual([
+      expect.objectContaining({ title: 'Desde', price: 219, compareAtPrice: null, available: true, currency: 'EUR' }),
+    ]);
+    expect(p.raw).toMatchObject({ priceRange: { lowPrice: 219, highPrice: 459 }, productId: '202' });
+  });
+
+  it('en un AggregateOffer, highPrice no se toma como precio tachado', () => {
+    const agg = ld({ '@type': 'Product', name: 'Almohada', offers: { '@type': 'AggregateOffer', lowPrice: '49', highPrice: '79', priceCurrency: 'EUR' } });
+    expect(parseProductPage(agg, 'https://x.com/a')!.variants[0]).toMatchObject({ price: 49, compareAtPrice: null, title: 'Desde' });
+  });
+
+  it('ignora páginas que solo tienen ImageObject', () => {
+    expect(parseProductPage(related, 'https://www.mx.com/x')).toBeNull();
   });
 });

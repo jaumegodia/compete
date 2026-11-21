@@ -24,11 +24,30 @@ GitHub Actions (cada día 04:17 UTC, con respaldo a las 09:47 UTC)
 | **WooCommerce** | Store API pública `/wp-json/wc/store/v1/products` | Alta: los productos variables piden cada variación aparte |
 | **Genérico** | `robots.txt` → sitemaps → cada ficha → datos schema.org (JSON-LD `Product` / `ProductGroup`) | Media: depende de que la web publique bien sus datos estructurados (la mayoría lo hace para Google Shopping) |
 
-En el adaptador genérico, la categoría sale de los datos del producto, de las migas de pan o del primer tramo de la URL. Las páginas de packs o landings que repiten los SKU de otro producto se descartan y se conserva la ficha principal.
+En el adaptador genérico:
+
+- **Sitemaps**: se toleran prólogos rotos (`<?phpxml …?>`) y comentarios. En un índice se siguen primero los hijos de producto (`product`, `producto`…) y solo si no dan URLs se miran los demás. Las URLs con pinta de ficha (`/products/…`, `/producto/…`, `…-p-123`, `/123-x.html`) se visitan antes que el resto.
+- **Filtro por web**: `sites.include_url_patterns` es una lista de expresiones regulares (sin distinguir mayúsculas) que se comparan con la ruta de cada URL. Si hay alguna, solo se visitan las fichas que encajan. Por ejemplo, Maxcolchón tiene `^/colchon[^/]*-c-\d+/` para quedarse con los colchones.
+
+  | Web | `include_url_patterns` | Para qué |
+  |---|---|---|
+  | Maxcolchón | `^/colchon[^/]*-c-\d+/` | Solo colchones (la web vende también sábanas, bases, cabeceros…) |
+  | Emma | `^/(colchones\|almohadas[^/]*\|camas\|toppers\|complementos\|packs-ahorro)/[^/]+` | Todo el catálogo, sin blog ni landings: la captura pasa de 761 a 640 páginas y de ~23 a ~14 min |
+
+  Se cambia con `update sites set include_url_patterns = array['…'] where base_url = '…';`. Antes de poner un filtro, comprueba que encaja con las URLs de los productos ya guardados (`select url from products where site_id = …`): si una ficha deja de pasar el filtro, se marcará como retirada.
+- **JSON-LD**: solo cuentan los bloques cuyo `@type` es o incluye `Product`/`ProductGroup` (se ignoran los `ImageObject` de productos relacionados). Con un `AggregateOffer` sin precio por medida se guarda una variante «Desde» con `lowPrice`, y `lowPrice`/`highPrice` quedan en `products.raw.priceRange`. `highPrice` nunca se toma como precio tachado. `aggregateRating` va a `products.rating` y `products.review_count`.
+- La categoría sale de los datos del producto, de las migas de pan o del primer tramo de la URL. Las páginas de packs o landings que repiten los SKU de otro producto se descartan y se conserva la ficha principal.
 
 Si una web tiene `platform = 'auto'`, se detecta en cada ejecución probando primero Shopify, luego WooCommerce y, si no, el genérico. Cuando se detecta Shopify o WooCommerce se guarda para no repetir la detección.
 
-Si el genérico no encuentra productos, la ejecución queda en `scrape_runs` con estado `error` y el aviso de que hace falta un adaptador a medida (`scrapers/src/adapters/`).
+Cada ejecución guarda en `scrape_runs.diagnostics` el código HTTP de `robots.txt` y de cada sitemap, el nº de sitemaps hijos, las URLs encontradas y tras filtrar, y las páginas visitadas. Si el genérico no encuentra productos, la ejecución queda con estado `error` y un motivo concreto:
+
+| Mensaje | Qué pasa |
+|---|---|
+| *Web bloqueada por protección anti-bots (Cloudflare…)* | Los sitemaps devuelven un desafío anti-bots (403). No se arregla con un adaptador: hace falta otra fuente de datos (feed, Google Shopping…) |
+| *0 URLs de ficha en el sitemap* | No hay sitemap o está vacío |
+| *0 URLs de ficha en el sitemap tras filtrar* | Hay URLs, pero ninguna pasa `include_url_patterns` o las exclusiones |
+| *Fichas sin JSON-LD Product* | Las fichas no publican datos schema.org: hará falta un adaptador a medida (`scrapers/src/adapters/`) |
 
 ### Promociones de la home
 
@@ -53,10 +72,10 @@ Migraciones en `supabase/migrations/`, datos del piloto en `supabase/seed.sql`.
 | Tabla | Contenido |
 |---|---|
 | `brands`, `brand_competitors` | Marcas y quién compite con quién |
-| `sites` | Webs a capturar (`platform`: auto, shopify, woocommerce, generic) |
+| `sites` | Webs a capturar (`platform`: auto, shopify, woocommerce, generic; `include_url_patterns`: filtro opcional de fichas) |
 | `products`, `variants` | Catálogo, con `first_seen_at`, `last_seen_at` y `removed_at` |
 | `price_snapshots` | Un registro diario por variante: precio, precio tachado y disponibilidad |
-| `scrape_runs` | Cada ejecución: estado, nº de productos, errores |
+| `scrape_runs` | Cada ejecución: estado, nº de productos, errores y `diagnostics` (sitemaps, códigos HTTP, recuentos) |
 | `site_promotions` | Promoción comunicada en la home cada día: descuento principal, códigos, campañas, envío gratis y mensajes |
 | `events` | Cambios detectados (alimentan alertas y resumen semanal) |
 
@@ -79,6 +98,7 @@ npm install
 cp .env.example .env   # y rellena la clave
 npm test
 npm run scrape:dry -- --url https://www.dormideo.com   # prueba sin base de datos → out/
+npm run scrape:dry -- --url https://www.ejemplo.com --include '^/colchon'   # con filtro de URLs (varios: separados por comas)
 npm run scrape -- --site dormideo                      # captura y guarda solo Dormideo
 ```
 
