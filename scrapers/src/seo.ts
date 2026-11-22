@@ -107,6 +107,9 @@ export function parseRankedKeywords(items: any[]): RankedKeyword[] {
 
 // ---------- DataForSEO ----------
 
+/** Sin date_from la API solo devuelve los últimos 6 meses; Labs tiene histórico desde octubre de 2020. */
+const HISTORY_FROM = '2020-10-01';
+
 /** Una tarea live de Labs. Devuelve result[0] y el coste. */
 export async function labs(endpoint: string, task: Record<string, unknown>): Promise<{ result: any; cost: number }> {
   const json = await dfsRequest(`/dataforseo_labs/google/${endpoint}/live`, [{ ...SPAIN, ...task }]);
@@ -141,7 +144,7 @@ async function main() {
     const domain = domainOf(site.base_url);
     console.log(`→ ${domain}`);
     try {
-      const hist = await labs('historical_rank_overview', { target: domain });
+      const hist = await labs('historical_rank_overview', { target: domain, date_from: HISTORY_FROM });
       const months = parseHistory(hist.result?.items ?? []);
       totalCost += hist.cost;
       const last = months.at(-1);
