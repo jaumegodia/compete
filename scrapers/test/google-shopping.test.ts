@@ -42,6 +42,25 @@ describe('Google Shopping: títulos', () => {
     expect(parseShoppingTitle('Colchón Max Confort 90x190', 'Maxcolchon').model).toBe('Colchón Max Confort'); // "Max" no es la marca
     expect(parseShoppingTitle('Maxcolchon', 'Maxcolchon').model).toBe('Maxcolchon');
   });
+
+  it('limpia los títulos de Flex: reclamos de oferta, separadores, "cm" suelto y medidas con cero delante', () => {
+    expect(parseShoppingTitle('¡hasta 70% Dto! Canapé Abatible Madera 25 de Blanco 150x190', 'Flex')).toEqual({
+      model: 'Canapé Abatible Madera 25 de Blanco',
+      size: '150x190',
+      extra: null,
+    });
+    expect(parseShoppingTitle('Canape Minimal Rustic Gris 090x200', 'Flex').size).toBe('90x200');
+    expect(parseShoppingTitle('Canapé Abatible Living Eléctrico polipiel negro Cm 180x190', 'Flex').model).toBe(
+      'Canapé Abatible Living Eléctrico polipiel negro',
+    );
+    expect(parseShoppingTitle('Colchón Imperial - 105x182 cm', 'Flex')).toMatchObject({ model: 'Colchón Imperial', size: '105x182' });
+    expect(parseShoppingTitle('Canapé Abatible 19 - Blanco 150x190', 'Flex').model).toBe('Canapé Abatible 19 Blanco');
+    expect(parseShoppingTitle('Flex Colchón Halia 25', 'Flex').model).toBe('Colchón Halia 25');
+    expect(parseShoppingTitle('Almohada Visco Plata 70 cm', 'Flex').model).toBe('Almohada Visco Plata 70 cm'); // "70 cm" sí es dato
+    expect(parseShoppingTitle('Base Tapizada Tapiflex Crudo', 'Flex').model).toBe('Base Tapizada Tapiflex Crudo'); // no es la marca
+    expect(parseShoppingTitle('Colchón Flexible Confort -30% Black Friday', 'Flex').model).toBe('Colchón Flexible Confort');
+    expect(parseShoppingTitle('Colchón 100% algodón', 'X').model).toBe('Colchón 100% algodón');
+  });
 });
 
 describe('Google Shopping: agrupación por modelo', () => {

@@ -47,34 +47,48 @@ export interface ShoppingItem {
 const SIZE = /(\d{2,3})\s*[x×]\s*(\d{2,3})(?:\s*cm)?/i;
 const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
-const DANGLING = /^(de|del|by|por|para|con|y|-|–|\+|,)$/i;
+const DANGLING = /^(de|del|by|por|para|con|y|-|–|\+|,|\/)$/i;
 
-/** ¿Es esta palabra la marca (o un trozo cortado de ella, como "Maxcolch")? */
+// Reclamos de oferta que algunas tiendas meten en el título ("¡hasta 70% Dto!", "-30%", "Black Friday"…)
+const PROMO = [
+  /¡[^!]*!?/g,
+  /(?:\bhasta\s+)?-?\b\d{1,2}\s*%(?:\s*(?:de\s+)?(?:dto\.?|descuento))?/gi,
+  /\b(?:black\s+friday|cyber\s+monday|ofertas?|outlet|rebajas|liquidaci[oó]n|chollo)\b/gi,
+];
+
+/**
+ * ¿Es esta palabra la marca? La palabra exacta, o un trozo cortado de una marca larga ("Maxcolch" de
+ * "Maxcolchon"). Una marca corta como "Flex" solo se quita entera, para no tocar "Flexible" o "Tapiflex".
+ */
 function isBrandWord(word: string, brand: string): boolean {
   const w = fold(word).replace(/[^a-z0-9]/g, '');
   const b = fold(brand).replace(/[^a-z0-9]/g, '');
   if (!w || !b) return false;
-  const prefix = b.slice(0, Math.min(6, b.length));
-  return w.startsWith(prefix) && (b.startsWith(w) || w.startsWith(b));
+  return w === b || (w.length >= 6 && b.startsWith(w));
 }
 
 /** "Colchón Intense 90x190" → { model: "Colchón Intense", size: "90x190", extra: null } */
 export function parseShoppingTitle(title: string, brand?: string): { model: string; size: string | null; extra: string | null } {
   let t = title.replace(/\s+/g, ' ').trim();
   const m = t.match(SIZE);
-  const size = m ? `${m[1]}x${m[2]}` : null;
+  // "090x200" → "90x200": la misma medida debe tener siempre la misma clave
+  const size = m ? `${Number(m[1])}x${Number(m[2])}` : null;
   if (m) t = t.replace(m[0], ' ');
   // Detalle entre paréntesis (p. ej. "(Cajón Pistón)"): opción de la variante, no del modelo
   const extras = [...t.matchAll(/\(([^)]*)\)?/g)].map((x) => x[1].trim()).filter(Boolean);
   t = t.replace(/\([^)]*\)?/g, ' ');
-  if (brand) {
-    // Quita la marca esté donde esté ("Maxcolchon Colchón Everest", "Colchón Gel Sport Maxcolchon",
-    // "Topper 4cm Maxcolchon de Grosor Maxcolch") y las palabras que quedan colgando al final ("de", "by"…)
-    const words = t.split(' ').filter((w) => w && !isBrandWord(w, brand));
-    while (words.length > 1 && DANGLING.test(words[words.length - 1])) words.pop();
-    if (words.length) t = words.join(' ');
-  }
-  const model = t.replace(/\s+/g, ' ').replace(/[\s\-–,+]+$/, '').trim();
+  for (const re of PROMO) t = t.replace(re, ' ');
+  // Guiones usados como separador ("Canapé 19 - Blanco") y "cm" suelto que queda al quitar la medida
+  t = t.replace(/\s+[-–|]\s+/g, ' ');
+  let words = t.split(' ').filter(Boolean);
+  words = words.filter((w, i) => !(/^cms?\.?$/i.test(w) && !/\d$/.test(words[i - 1] ?? '')));
+  // Quita la marca esté donde esté ("Maxcolchon Colchón Everest", "Colchón Gel Sport Maxcolchon",
+  // "Topper 4cm Maxcolchon de Grosor Maxcolch")
+  if (brand) words = words.filter((w) => !isBrandWord(w, brand));
+  // Palabras que quedan colgando al principio o al final ("de", "by", "-"…)
+  while (words.length > 1 && DANGLING.test(words[words.length - 1])) words.pop();
+  while (words.length > 1 && DANGLING.test(words[0])) words.shift();
+  const model = words.join(' ').replace(/[\s\-–,+]+$/, '').trim();
   return { model: model || title.trim(), size, extra: extras.join(' · ') || null };
 }
 
