@@ -6,7 +6,7 @@ on:
       mode:
         description: 'probe = guarda respuestas crudas de unas búsquedas (artefacto), sin base de datos'
         type: choice
-        options: [probe]
+        options: [probe, ads]
         default: probe
       keywords:
         description: 'Búsquedas para la sonda, separadas por |'
@@ -33,6 +33,12 @@ jobs:
         run: |
           IFS='|' read -ra KW <<< "$KEYWORDS"
           npx tsx scrapers/src/sov-probe.ts "${KW[@]}"
+      - name: Sonda de Google Ads Transparency
+        if: inputs.mode == 'ads'
+        env:
+          DATAFORSEO_LOGIN: ${{ secrets.DATAFORSEO_LOGIN }}
+          DATAFORSEO_PASSWORD: ${{ secrets.DATAFORSEO_PASSWORD }}
+        run: npx tsx scrapers/src/ads-probe.ts
       - uses: actions/upload-artifact@v4
         if: always() && hashFiles('out/**') != ''
         with:
