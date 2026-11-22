@@ -11,7 +11,9 @@
     "scrape": "tsx scrapers/src/run.ts",
     "scrape:dry": "tsx scrapers/src/run.ts --dry-run",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "seo": "tsx scrapers/src/seo.ts",
+    "seo:dry": "tsx scrapers/src/seo.ts --dry-run"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

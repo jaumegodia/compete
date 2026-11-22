@@ -78,6 +78,20 @@ Cada ejecución guarda en `scrape_runs.diagnostics` el código HTTP de `robots.t
 | *0 URLs de ficha en el sitemap tras filtrar* | Hay URLs, pero ninguna pasa `include_url_patterns` o las exclusiones |
 | *Fichas sin JSON-LD Product* | Las fichas no publican datos schema.org: hará falta un adaptador a medida (`scrapers/src/adapters/`) |
 
+### Tráfico y SEO (DataForSEO Labs)
+
+`npm run seo` consulta DataForSEO Labs (Google España) para el dominio de cada web activa, también las que se siguen por Google Shopping:
+
+- `historical_rank_overview` → `domain_metrics`: una fila por web y mes con visitas orgánicas y de pago estimadas, keywords en el top 100, distribución de posiciones, valor del tráfico y gasto estimado en Google Ads. Trae todo el histórico disponible, así que la gráfica tiene años de datos desde la primera ejecución.
+- `ranked_keywords` → `domain_keywords`: las 100 keywords orgánicas que más tráfico llevan a cada web (`SEO_KEYWORDS` cambia el número), una foto por ejecución.
+
+Se ejecuta con el workflow **Tráfico y SEO (DataForSEO Labs)**: el día 3 de cada mes (Labs actualiza sus datos una vez al mes) o a mano desde Actions. Cuesta unos céntimos por web y ejecución; el log muestra el coste exacto. El panel lo muestra en **Tráfico y SEO** (`/trafico`).
+
+```bash
+npm run seo:dry                 # llama a la API y muestra el resumen, sin guardar
+npm run seo -- --site emma      # solo una web
+```
+
 ### Promociones de la home
 
 Con la Directiva Ómnibus muchas marcas no publican precios tachados, pero sí anuncian su descuento en la home. Cada día se lee la home de cada web y se guarda en `site_promotions`:
@@ -107,6 +121,8 @@ Migraciones en `supabase/migrations/`, datos del piloto en `supabase/seed.sql`.
 | `scrape_runs` | Cada ejecución: estado, nº de productos, errores y `diagnostics` (sitemaps, códigos HTTP, recuentos) |
 | `site_promotions` | Promoción comunicada en la home cada día: descuento principal, códigos, campañas, envío gratis y mensajes |
 | `events` | Cambios detectados (alimentan alertas y resumen semanal) |
+| `domain_metrics` | Tráfico y SEO por web y mes (DataForSEO Labs) |
+| `domain_keywords` | Top keywords orgánicas de cada web, una foto por ejecución |
 
 RLS está activado en todas las tablas y todavía sin políticas: solo el scraper (con la clave `service_role`) puede leer y escribir. Las políticas para usuarios se añadirán con el frontend.
 
