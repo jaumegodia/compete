@@ -28,7 +28,10 @@ for (const keyword of keywords) {
     for (const i of r?.items ?? []) {
       if (i.type === 'paid') console.log(`   paid #${i.rank_group} ${i.domain} · ${i.title}`);
       if (/shopping|product/.test(i.type)) {
-        console.log(`   ${i.type}: ${JSON.stringify(i).slice(0, 600)}`);
+        console.log(`   ${i.type} «${i.title}» claves: ${Object.keys(i).join(',')}`);
+        const el = i.items?.[0];
+        if (el) console.log(`     elemento: ${JSON.stringify({ ...el, url: undefined, xpath: undefined })}`);
+        console.log(`     vendedores: ${(i.items ?? []).map((e: any) => `${e.seller ?? e.source ?? '?'}${e.is_paid || e.ad || e.sponsored ? ' [AD]' : ''}`).join(' | ')}`);
       }
     }
     await writeFile(`out/serp-${device}-${keyword.replace(/\W+/g, '_')}.json`, JSON.stringify(json, null, 1));
@@ -44,7 +47,12 @@ for (const keyword of keywords) {
     cost += Number(t.cost ?? 0);
     const r = t.result?.[0];
     console.log(`shopping «${keyword}»: ${t.status_code} · tipos ${JSON.stringify(summarize(r?.items))}`);
-    for (const it of (r?.items ?? []).slice(0, 40)) console.log(`   ${it.type} #${it.rank_group} ${it.seller} · ${it.title} · ${it.price}`);
+    const serp = (r?.items ?? []).filter((it: any) => it.type === 'google_shopping_serp');
+    const keys = new Map<string, number>();
+    for (const it of serp) for (const [k, v] of Object.entries(it)) if (v !== null && v !== false) keys.set(k, (keys.get(k) ?? 0) + 1);
+    console.log(`   claves con valor: ${[...keys].map(([k, c]) => `${k}(${c})`).join(', ')}`);
+    console.log(`   ejemplo: ${JSON.stringify({ ...serp[0], product_images: undefined, shopping_url: undefined, xpath: undefined })}`);
+    console.log(`   tags: ${JSON.stringify([...new Set(serp.flatMap((it: any) => it.tags ?? []))])}`);
     await writeFile(`out/shopping-${keyword.replace(/\W+/g, '_')}.json`, JSON.stringify(got, null, 1));
     break;
   }
