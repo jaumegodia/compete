@@ -1,0 +1,40 @@
+name: Tráfico y SEO (DataForSEO Labs)
+
+on:
+  schedule:
+    - cron: '23 5 3 * *' # día 3 de cada mes a las 05:23 UTC (Labs actualiza sus datos una vez al mes)
+  workflow_dispatch:
+    inputs:
+      site:
+        description: 'Filtrar por texto de la URL (vacío = todas las webs activas)'
+        required: false
+        default: ''
+      dry:
+        description: 'Solo prueba: llama a la API pero no guarda en Supabase'
+        type: boolean
+        default: false
+
+concurrency:
+  group: seo
+  cancel-in-progress: false
+
+jobs:
+  seo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Histórico de tráfico y top keywords
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DATAFORSEO_LOGIN: ${{ secrets.DATAFORSEO_LOGIN }}
+          DATAFORSEO_PASSWORD: ${{ secrets.DATAFORSEO_PASSWORD }}
+          SITE: ${{ inputs.site }}
+        run: |
+          if [ "${{ inputs.dry }}" = "true" ]; then npm run seo:dry; else npm run seo; fi

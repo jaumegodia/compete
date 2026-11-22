@@ -9,6 +9,8 @@ const NAV = [
   { href: '/informe', label: 'Informe diario' },
   { href: '/comparativa', label: 'Comparativa' },
   { href: '/promociones', label: 'Promociones' },
+  { href: '/trafico', label: 'Tráfico y SEO' },
+  { href: '/resenas', label: 'Reseñas' },
   { href: '/marcas', label: 'Marcas y webs' },
   { href: '/capturas', label: 'Capturas' },
 ];
