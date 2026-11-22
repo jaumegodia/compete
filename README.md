@@ -92,6 +92,18 @@ npm run seo:dry                 # llama a la API y muestra el resumen, sin guard
 npm run seo -- --site emma      # solo una web
 ```
 
+### Reseñas (Trustpilot)
+
+`npm run reviews` pide a DataForSEO (Business Data API, modo task) el perfil de Trustpilot de cada web activa: guarda la nota global y el nº de reseñas en `review_snapshots` (una foto por ejecución) y las 100 reseñas más recientes en `reviews` (`REVIEWS_DEPTH` cambia el número; se cobra por cada 20). Las reseñas se identifican por su id de Trustpilot, así que repetir no duplica.
+
+El dominio de Trustpilot es el de la web sin `www`. Si una marca tiene el perfil en otro dominio:
+
+```sql
+update sites set trustpilot_domain = 'emma-sleep.com' where base_url = 'https://www.emma-colchon.es';
+```
+
+Workflow **Reseñas (Trustpilot vía DataForSEO)**: cada lunes y a mano. Panel: **Reseñas** (`/resenas`).
+
 ### Promociones de la home
 
 Con la Directiva Ómnibus muchas marcas no publican precios tachados, pero sí anuncian su descuento en la home. Cada día se lee la home de cada web y se guarda en `site_promotions`:
@@ -123,6 +135,7 @@ Migraciones en `supabase/migrations/`, datos del piloto en `supabase/seed.sql`.
 | `events` | Cambios detectados (alimentan alertas y resumen semanal) |
 | `domain_metrics` | Tráfico y SEO por web y mes (DataForSEO Labs) |
 | `domain_keywords` | Top keywords orgánicas de cada web, una foto por ejecución |
+| `review_snapshots`, `reviews` | Nota y nº de reseñas de Trustpilot por fecha, y las reseñas recientes |
 
 RLS está activado en todas las tablas y todavía sin políticas: solo el scraper (con la clave `service_role`) puede leer y escribir. Las políticas para usuarios se añadirán con el frontend.
 

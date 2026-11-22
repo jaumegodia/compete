@@ -1,5 +1,5 @@
 import { getDb, must } from './db.js';
-import { sleep } from './http.js';
+import { dfsRequest, isAuthError, SPAIN } from './dataforseo.js';
 
 /**
  * Tráfico y SEO por dominio con DataForSEO Labs (Google España).
@@ -13,10 +13,6 @@ import { sleep } from './http.js';
  *   - ranked_keywords: las N keywords orgánicas que más tráfico llevan a la web.
  * Credenciales: DATAFORSEO_LOGIN y DATAFORSEO_PASSWORD. Variables opcionales: SEO_KEYWORDS (N, 100 por defecto).
  */
-
-const API = 'https://api.dataforseo.com/v3/dataforseo_labs/google';
-const LOCATION = 2724; // España
-const LANGUAGE = 'es';
 
 // ---------- Parseo (puro, probado en test/seo.test.ts) ----------
 
@@ -111,37 +107,13 @@ export function parseRankedKeywords(items: any[]): RankedKeyword[] {
 
 // ---------- DataForSEO ----------
 
-function authHeaders(): Record<string, string> {
-  const login = process.env.DATAFORSEO_LOGIN;
-  const password = process.env.DATAFORSEO_PASSWORD;
-  return login && password ? { authorization: `Basic ${Buffer.from(`${login}:${password}`).toString('base64')}` } : {};
-}
-
 /** Una tarea live de Labs. Devuelve result[0] y el coste. */
 export async function labs(endpoint: string, task: Record<string, unknown>): Promise<{ result: any; cost: number }> {
-  let lastErr: unknown;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const res = await fetch(`${API}/${endpoint}/live`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', ...authHeaders() },
-      body: JSON.stringify([{ location_code: LOCATION, language_code: LANGUAGE, ...task }]),
-      signal: AbortSignal.timeout(120000),
-    }).catch((e) => e as Error);
-    if (res instanceof Error || res.status >= 500 || res.status === 429) {
-      lastErr = res instanceof Error ? res : new Error(`DataForSEO: HTTP ${res.status}`);
-      await sleep(3000 * (attempt + 1));
-      continue;
-    }
-    if (res.status === 401 || res.status === 403)
-      throw new Error(`DataForSEO: HTTP ${res.status}. Revisa DATAFORSEO_LOGIN y DATAFORSEO_PASSWORD (API Access).`);
-    const json: any = await res.json();
-    if (json.status_code !== 20000) throw new Error(`DataForSEO: ${json.status_code} ${json.status_message}`);
-    const t = json.tasks?.[0];
-    if (!t) throw new Error('DataForSEO: respuesta sin tareas');
-    if (t.status_code !== 20000) throw new Error(`DataForSEO ${endpoint}: ${t.status_code} ${t.status_message}`);
-    return { result: t.result?.[0] ?? null, cost: Number(t.cost ?? 0) };
-  }
-  throw lastErr;
+  const json = await dfsRequest(`/dataforseo_labs/google/${endpoint}/live`, [{ ...SPAIN, ...task }]);
+  const t = json.tasks?.[0];
+  if (!t) throw new Error('DataForSEO: respuesta sin tareas');
+  if (t.status_code !== 20000) throw new Error(`DataForSEO ${endpoint}: ${t.status_code} ${t.status_message}`);
+  return { result: t.result?.[0] ?? null, cost: Number(t.cost ?? 0) };
 }
 
 // ---------- Ejecución ----------
@@ -214,7 +186,7 @@ async function main() {
     } catch (e) {
       failures++;
       console.error(`  error: ${(e as Error).message}`);
-      if ((e as Error).message.includes('HTTP 401') || (e as Error).message.includes('HTTP 403')) break;
+      if (isAuthError(e)) break;
     }
   }
   console.log(`Coste DataForSEO: ${totalCost.toFixed(4)} $${dry ? ' (sin guardar: --dry-run)' : ''}`);

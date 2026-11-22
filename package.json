@@ -13,7 +13,9 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "seo": "tsx scrapers/src/seo.ts",
-    "seo:dry": "tsx scrapers/src/seo.ts --dry-run"
+    "seo:dry": "tsx scrapers/src/seo.ts --dry-run",
+    "reviews": "tsx scrapers/src/reviews.ts",
+    "reviews:dry": "tsx scrapers/src/reviews.ts --dry-run"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
