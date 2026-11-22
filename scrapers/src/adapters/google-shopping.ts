@@ -47,6 +47,17 @@ export interface ShoppingItem {
 const SIZE = /(\d{2,3})\s*[x×]\s*(\d{2,3})(?:\s*cm)?/i;
 const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
+const DANGLING = /^(de|del|by|por|para|con|y|-|–|\+|,)$/i;
+
+/** ¿Es esta palabra la marca (o un trozo cortado de ella, como "Maxcolch")? */
+function isBrandWord(word: string, brand: string): boolean {
+  const w = fold(word).replace(/[^a-z0-9]/g, '');
+  const b = fold(brand).replace(/[^a-z0-9]/g, '');
+  if (!w || !b) return false;
+  const prefix = b.slice(0, Math.min(6, b.length));
+  return w.startsWith(prefix) && (b.startsWith(w) || w.startsWith(b));
+}
+
 /** "Colchón Intense 90x190" → { model: "Colchón Intense", size: "90x190", extra: null } */
 export function parseShoppingTitle(title: string, brand?: string): { model: string; size: string | null; extra: string | null } {
   let t = title.replace(/\s+/g, ' ').trim();
@@ -57,11 +68,11 @@ export function parseShoppingTitle(title: string, brand?: string): { model: stri
   const extras = [...t.matchAll(/\(([^)]*)\)?/g)].map((x) => x[1].trim()).filter(Boolean);
   t = t.replace(/\([^)]*\)?/g, ' ');
   if (brand) {
-    const b = fold(brand);
-    // Quita la marca al principio ("Maxcolchon Colchón Everest" → "Colchón Everest")
-    const words = t.split(' ').filter(Boolean);
-    while (words.length > 1 && fold(words[0]).startsWith(b.slice(0, 6)) && b.startsWith(fold(words[0]).slice(0, 6))) words.shift();
-    t = words.join(' ');
+    // Quita la marca esté donde esté ("Maxcolchon Colchón Everest", "Colchón Gel Sport Maxcolchon",
+    // "Topper 4cm Maxcolchon de Grosor Maxcolch") y las palabras que quedan colgando al final ("de", "by"…)
+    const words = t.split(' ').filter((w) => w && !isBrandWord(w, brand));
+    while (words.length > 1 && DANGLING.test(words[words.length - 1])) words.pop();
+    if (words.length) t = words.join(' ');
   }
   const model = t.replace(/\s+/g, ' ').replace(/[\s\-–,+]+$/, '').trim();
   return { model: model || title.trim(), size, extra: extras.join(' · ') || null };
