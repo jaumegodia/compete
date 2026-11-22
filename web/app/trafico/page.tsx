@@ -16,9 +16,8 @@ interface MetricRow {
   organic_pos_2_3: number | null;
   organic_pos_4_10: number | null;
   organic_traffic_value: number | null;
-  paid_etv: number | null;
-  paid_keywords: number | null;
-  paid_traffic_cost: number | null;
+  organic_new: number | null;
+  organic_lost: number | null;
   fetched_at: string;
 }
 
@@ -36,7 +35,6 @@ const METRICS = {
   organic_etv: 'Visitas orgánicas / mes',
   organic_keywords: 'Keywords en el top 100',
   top10: 'Keywords en el top 10',
-  paid_etv: 'Visitas de pago / mes',
 } as const;
 type Metric = keyof typeof METRICS;
 
@@ -48,11 +46,10 @@ type Agg = {
   top3: number;
   top10: number;
   organic_traffic_value: number;
-  paid_etv: number;
-  paid_keywords: number;
-  paid_traffic_cost: number;
+  organic_new: number;
+  organic_lost: number;
 };
-const empty = (): Agg => ({ organic_etv: 0, organic_keywords: 0, top3: 0, top10: 0, organic_traffic_value: 0, paid_etv: 0, paid_keywords: 0, paid_traffic_cost: 0 });
+const empty = (): Agg => ({ organic_etv: 0, organic_keywords: 0, top3: 0, top10: 0, organic_traffic_value: 0, organic_new: 0, organic_lost: 0 });
 const add = (a: Agg, r: MetricRow) => {
   const top3 = (r.organic_pos_1 ?? 0) + (r.organic_pos_2_3 ?? 0);
   a.organic_etv += r.organic_etv ?? 0;
@@ -60,9 +57,8 @@ const add = (a: Agg, r: MetricRow) => {
   a.top3 += top3;
   a.top10 += top3 + (r.organic_pos_4_10 ?? 0);
   a.organic_traffic_value += r.organic_traffic_value ?? 0;
-  a.paid_etv += r.paid_etv ?? 0;
-  a.paid_keywords += r.paid_keywords ?? 0;
-  a.paid_traffic_cost += r.paid_traffic_cost ?? 0;
+  a.organic_new += r.organic_new ?? 0;
+  a.organic_lost += r.organic_lost ?? 0;
 };
 const usd = (v: number) => v.toLocaleString('es-ES', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const monthLabel = (m: string) => new Date(`${m}T12:00:00Z`).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
@@ -98,7 +94,7 @@ export default async function Trafico({
         (from, to) =>
           db()
             .from('domain_metrics')
-            .select('site_id, month, organic_etv, organic_keywords, organic_pos_1, organic_pos_2_3, organic_pos_4_10, organic_traffic_value, paid_etv, paid_keywords, paid_traffic_cost, fetched_at')
+            .select('site_id, month, organic_etv, organic_keywords, organic_pos_1, organic_pos_2_3, organic_pos_4_10, organic_traffic_value, organic_new, organic_lost, fetched_at')
             .in('site_id', siteIds)
             .order('month')
             .order('site_id')
@@ -193,8 +189,8 @@ export default async function Trafico({
               <th className="text-right">Top 3</th>
               <th className="text-right">Top 10</th>
               <th className="text-right">Valor del tráfico</th>
-              <th className="text-right">Visitas de pago</th>
-              <th className="text-right">Gasto Ads est.</th>
+              <th className="text-right">Keywords nuevas</th>
+              <th className="text-right">Keywords perdidas</th>
             </tr>
           </thead>
           <tbody>
@@ -220,15 +216,15 @@ export default async function Trafico({
                 <td className="num text-right">{now ? num(now.top3) : '—'}</td>
                 <td className="num text-right">{now ? num(now.top10) : '—'}</td>
                 <td className="num text-right">{now ? usd(now.organic_traffic_value) : '—'}</td>
-                <td className="num text-right">{now ? num(Math.round(now.paid_etv)) : '—'}</td>
-                <td className="num text-right">{now ? usd(now.paid_traffic_cost) : '—'}</td>
+                <td className="num text-right text-good">{now ? `+${num(now.organic_new)}` : '—'}</td>
+                <td className="num text-right text-bad">{now ? `−${num(now.organic_lost)}` : '—'}</td>
               </tr>
             ))}
           </tbody>
         </Table>
         <p className="mt-3 text-xs text-ink-3">
           Cifras estimadas a partir de posiciones y volúmenes de búsqueda, no de analítica real: sirven para comparar marcas y ver tendencias, no como
-          valor absoluto. «Valor del tráfico» es lo que costaría el tráfico orgánico en Google Ads. Variación respecto al mes anterior.
+          valor absoluto. «Valor del tráfico» es lo que costaría el tráfico orgánico en Google Ads. Variación respecto al mes anterior; keywords nuevas y perdidas en el top 100 durante el mes. El tráfico de pago no se muestra: la estimación de DataForSEO no capta bien las campañas actuales (Shopping, Performance Max).
         </p>
       </Card>
 
