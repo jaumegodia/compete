@@ -28,6 +28,20 @@ describe('Google Shopping: títulos', () => {
     });
     expect(parseShoppingTitle('Colchón 150 x 190 cm', 'X').size).toBe('150x190');
   });
+
+  it('quita la marca también en medio o al final del título', () => {
+    expect(parseShoppingTitle('Colchón Viscoelástico Gel Sport Alta Firmeza Maxcolchon', 'Maxcolchon').model).toBe(
+      'Colchón Viscoelástico Gel Sport Alta Firmeza',
+    );
+    expect(parseShoppingTitle('Topper 4 Luxe Sobrecolchón 4cm Maxcolchon de Grosor Maxcolch', 'Maxcolchon').model).toBe(
+      'Topper 4 Luxe Sobrecolchón 4cm de Grosor',
+    );
+    expect(parseShoppingTitle('Colchoneta de Espuma Viscoelástica Articulable Maxcolchón', 'Maxcolchon').model).toBe(
+      'Colchoneta de Espuma Viscoelástica Articulable',
+    );
+    expect(parseShoppingTitle('Colchón Max Confort 90x190', 'Maxcolchon').model).toBe('Colchón Max Confort'); // "Max" no es la marca
+    expect(parseShoppingTitle('Maxcolchon', 'Maxcolchon').model).toBe('Maxcolchon');
+  });
 });
 
 describe('Google Shopping: agrupación por modelo', () => {
