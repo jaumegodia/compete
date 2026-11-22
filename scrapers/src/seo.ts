@@ -109,6 +109,12 @@ export function parseRankedKeywords(items: any[]): RankedKeyword[] {
 
 /** Sin date_from la API solo devuelve los últimos 6 meses; Labs tiene histórico desde octubre de 2020. */
 const HISTORY_FROM = '2020-10-01';
+const monthsAgo = (k: number) => {
+  const d = new Date();
+  d.setUTCDate(1);
+  d.setUTCMonth(d.getUTCMonth() - k);
+  return d.toISOString().slice(0, 10);
+};
 
 /** Una tarea live de Labs. Devuelve result[0] y el coste. */
 export async function labs(endpoint: string, task: Record<string, unknown>): Promise<{ result: any; cost: number }> {
@@ -144,7 +150,10 @@ async function main() {
     const domain = domainOf(site.base_url);
     console.log(`→ ${domain}`);
     try {
-      const hist = await labs('historical_rank_overview', { target: domain, date_from: HISTORY_FROM });
+      // El histórico completo se paga por mes: solo la primera vez; después, los últimos 3 meses
+      const { count } = await db.from('domain_metrics').select('month', { count: 'exact', head: true }).eq('site_id', site.id);
+      const from = (count ?? 0) >= 12 && !process.env.SEO_FULL_HISTORY ? monthsAgo(3) : HISTORY_FROM;
+      const hist = await labs('historical_rank_overview', { target: domain, date_from: from });
       const months = parseHistory(hist.result?.items ?? []);
       totalCost += hist.cost;
       const last = months.at(-1);

@@ -82,7 +82,7 @@ Cada ejecución guarda en `scrape_runs.diagnostics` el código HTTP de `robots.t
 
 `npm run seo` consulta DataForSEO Labs (Google España) para el dominio de cada web activa, también las que se siguen por Google Shopping:
 
-- `historical_rank_overview` → `domain_metrics`: una fila por web y mes con visitas orgánicas y de pago estimadas, keywords en el top 100, distribución de posiciones, valor del tráfico y gasto estimado en Google Ads. Trae todo el histórico disponible, así que la gráfica tiene años de datos desde la primera ejecución.
+- `historical_rank_overview` → `domain_metrics`: una fila por web y mes con visitas orgánicas y de pago estimadas, keywords en el top 100, distribución de posiciones, valor del tráfico y gasto estimado en Google Ads. La primera vez trae todo el histórico (desde octubre de 2020, ~1 $ por las 5 webs); después solo los últimos 3 meses (`SEO_FULL_HISTORY=1` fuerza el completo).
 - `ranked_keywords` → `domain_keywords`: las 100 keywords orgánicas que más tráfico llevan a cada web (`SEO_KEYWORDS` cambia el número), una foto por ejecución.
 
 Se ejecuta con el workflow **Tráfico y SEO (DataForSEO Labs)**: el día 3 de cada mes (Labs actualiza sus datos una vez al mes) o a mano desde Actions. Cuesta unos céntimos por web y ejecución; el log muestra el coste exacto. El panel lo muestra en **Tráfico y SEO** (`/trafico`).
