@@ -53,7 +53,8 @@ const DANGLING = /^(de|del|by|por|para|con|y|-|–|\+|,|\/)$/i;
 const PROMO = [
   /¡[^!]*!?/g,
   /(?:\bhasta\s+)?-?\b\d{1,2}\s*%(?:\s*(?:de\s+)?(?:dto\.?|descuento))?/gi,
-  /\b(?:black\s+friday|cyber\s+monday|ofertas?|outlet|rebajas|liquidaci[oó]n|chollo)\b/gi,
+  // "Oferta" suelta no: algunas tiendas la usan en el nombre ("Almohada Viscoelástica Oferta" ≠ "Almohada Viscoelástica")
+  /\b(?:black\s+friday|cyber\s+monday)\b/gi,
 ];
 
 /**

@@ -60,6 +60,7 @@ describe('Google Shopping: títulos', () => {
     expect(parseShoppingTitle('Base Tapizada Tapiflex Crudo', 'Flex').model).toBe('Base Tapizada Tapiflex Crudo'); // no es la marca
     expect(parseShoppingTitle('Colchón Flexible Confort -30% Black Friday', 'Flex').model).toBe('Colchón Flexible Confort');
     expect(parseShoppingTitle('Colchón 100% algodón', 'X').model).toBe('Colchón 100% algodón');
+    expect(parseShoppingTitle('Almohada Viscoelástica Oferta', 'Maxcolchon').model).toBe('Almohada Viscoelástica Oferta');
   });
 });
 
