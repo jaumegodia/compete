@@ -178,8 +178,9 @@ async function runQueries(
   queries: string[],
   cfg: ShoppingConfig,
   warnings: string[],
-): Promise<{ items: ShoppingItem[]; cost: number; failed: number }> {
-  if (!queries.length) return { items: [], cost: 0, failed: 0 };
+): Promise<{ items: ShoppingItem[]; cost: number; failed: number; failedQueries: string[] }> {
+  if (!queries.length) return { items: [], cost: 0, failed: 0, failedQueries: [] };
+  const failedQueries: string[] = [];
   let cost = 0;
   const posted = await dfs('/task_post', queries.map((keyword) => ({
     keyword,
@@ -194,6 +195,7 @@ async function runQueries(
     if (t.status_code === 20100) pending.set(t.id, t.data?.keyword);
     else {
       failed++;
+      failedQueries.push(t.data?.keyword);
       warnings.push(`Google Shopping: no se pudo lanzar «${t.data?.keyword}»: ${t.status_message}`);
     }
   }
@@ -209,6 +211,7 @@ async function runQueries(
       cost += Number(t.cost ?? 0);
       if (t.status_code !== 20000) {
         failed++;
+        failedQueries.push(keyword);
         warnings.push(`Google Shopping: «${keyword}» ha fallado: ${t.status_message}`);
         continue;
       }
@@ -217,9 +220,22 @@ async function runQueries(
   }
   if (pending.size) {
     failed += pending.size;
+    failedQueries.push(...pending.values());
     warnings.push(`Google Shopping: ${pending.size} búsquedas sin resultado tras la espera máxima.`);
   }
-  return { items, cost, failed };
+  return { items, cost, failed, failedQueries };
+}
+
+/** Como runQueries, pero reintenta una vez las búsquedas que fallan (DataForSEO da a veces "Internal SE Server Error"). */
+async function runQueriesWithRetry(queries: string[], cfg: ShoppingConfig, warnings: string[]) {
+  const firstWarnings: string[] = [];
+  const first = await runQueries(queries, cfg, firstWarnings);
+  if (!first.failedQueries.length) {
+    warnings.push(...firstWarnings);
+    return first;
+  }
+  const retry = await runQueries(first.failedQueries, cfg, warnings);
+  return { items: first.items.concat(retry.items), cost: first.cost + retry.cost, failed: retry.failed, retried: first.failedQueries.length };
 }
 
 const dedupeQueries = (qs: string[]) => [...new Map(qs.map((q) => [fold(q).replace(/\s+/g, ' ').trim(), q.trim()])).values()];
@@ -235,19 +251,29 @@ export const googleShoppingAdapter: Adapter = {
 
     const seedQueries = dedupeQueries(cfg.queries?.length ? cfg.queries : [brand, `${brand} colchon`]).slice(0, maxQueries);
     opts.log(`  google shopping: ${seedQueries.length} búsquedas de partida (vendedor «${cfg.seller}»)`);
-    const seed = await runQueries(seedQueries, cfg, warnings);
+    const seed = await runQueriesWithRetry(seedQueries, cfg, warnings);
     let items = seed.items;
     let cost = seed.cost;
     let failed = seed.failed;
 
     let modelQueries: string[] = [];
+    let modelsDiscovered = 0;
+    let modelQueriesSkipped = 0;
     if (cfg.discoverModels !== false) {
       const done = new Set(seedQueries.map((q) => fold(q)));
-      modelQueries = dedupeQueries(groupShoppingItems(items, cfg).map((p) => `${brand} ${p.title}`))
-        .filter((q) => !done.has(fold(q)))
-        .slice(0, Math.max(0, maxQueries - seedQueries.length));
-      opts.log(`  google shopping: ${modelQueries.length} búsquedas por modelo`);
-      const byModel = await runQueries(modelQueries, cfg, warnings);
+      const candidates = dedupeQueries(groupShoppingItems(items, cfg).map((p) => `${brand} ${p.title}`)).filter(
+        (q) => !done.has(fold(q)),
+      );
+      modelsDiscovered = candidates.length;
+      modelQueries = candidates.slice(0, Math.max(0, maxQueries - seedQueries.length));
+      modelQueriesSkipped = candidates.length - modelQueries.length;
+      opts.log(
+        `  google shopping: ${modelsDiscovered} modelos descubiertos, ${modelQueries.length} búsquedas por modelo` +
+          (modelQueriesSkipped ? ` (${modelQueriesSkipped} sin búsqueda propia por el límite maxQueries=${maxQueries})` : ''),
+      );
+      if (modelQueriesSkipped)
+        warnings.push(`Google Shopping: ${modelQueriesSkipped} modelos sin búsqueda propia por el límite maxQueries=${maxQueries}; pueden faltar medidas.`);
+      const byModel = await runQueriesWithRetry(modelQueries, cfg, warnings);
       items = items.concat(byModel.items);
       cost += byModel.cost;
       failed += byModel.failed;
@@ -269,6 +295,8 @@ export const googleShoppingAdapter: Adapter = {
         seller: cfg.seller,
         queries: seedQueries.length + modelQueries.length,
         failedQueries: failed,
+        modelsDiscovered,
+        modelQueriesSkipped,
         resultsFound: items.length,
         sellerResults: sellerItems,
         models: products.length,

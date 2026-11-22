@@ -121,6 +121,28 @@ describe('Google Shopping: adaptador con DataForSEO simulado', () => {
     expect(res.error).toBeUndefined();
   });
 
+  it('reintenta una vez las búsquedas que fallan', async () => {
+    let posts = 0;
+    vi.stubGlobal('fetch', async (url: string) => {
+      if (url.endsWith('/task_post')) {
+        posts++;
+        return Response.json({ status_code: 20000, cost: 0.002, tasks: [{ id: `t${posts}`, status_code: 20100, data: { keyword: 'maxcolchon' } }] });
+      }
+      const id = url.split('/').pop()!;
+      return id === 't1'
+        ? Response.json({ status_code: 20000, tasks: [{ id, status_code: 50000, status_message: 'Internal SE Server Error.' }] })
+        : Response.json({ status_code: 20000, tasks: [{ id, status_code: 20000, result: [{ items: [item('Colchón Visco 90x190', 128.59, 161)] }] }] });
+    });
+    const res = await googleShoppingAdapter.scrape('https://x.com', {
+      maxProducts: 10, delayMs: 0, log: () => {},
+      config: { seller: 'Maxcolchon ES', brand: 'Maxcolchon', queries: ['maxcolchon'], discoverModels: false, pollMs: 0 },
+    });
+    expect(posts).toBe(2);
+    expect(res.products).toHaveLength(1);
+    expect(res.warnings).toEqual([]);
+    expect(res.diagnostics).toMatchObject({ failedQueries: 0 });
+  });
+
   it('explica cuando el vendedor no aparece', async () => {
     vi.stubGlobal('fetch', async (url: string) =>
       url.endsWith('/task_post')
