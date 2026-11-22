@@ -45,8 +45,8 @@ export async function persistScrape(
   const products = dedupe(result.products);
 
   // 1. Estado anterior
-  const existing = await fetchAll<{ id: string; external_id: string; removed_at: string | null }>((f, t) =>
-    db.from('products').select('id, external_id, removed_at').eq('site_id', site.id).range(f, t),
+  const existing = await fetchAll<{ id: string; external_id: string; removed_at: string | null; last_seen_at: string }>((f, t) =>
+    db.from('products').select('id, external_id, removed_at, last_seen_at').eq('site_id', site.id).range(f, t),
   );
   const existingByExt = new Map(existing.map((p) => [p.external_id, p]));
   const activeBefore = existing.filter((p) => !p.removed_at).length;
@@ -154,7 +154,10 @@ export async function persistScrape(
 
   // 4. Productos y variantes retirados
   const scrapedExt = new Set(products.map((p) => p.externalId));
-  const missing = existing.filter((p) => !p.removed_at && !scrapedExt.has(p.external_id));
+  // Con margen (fuentes variables como Google Shopping), solo se retira lo que lleva N días sin verse
+  const graceCutoff = result.removalGraceDays ? Date.now() - result.removalGraceDays * 86400000 : null;
+  const pastGrace = (lastSeen: string) => graceCutoff === null || Date.parse(lastSeen) < graceCutoff;
+  const missing = existing.filter((p) => !p.removed_at && !scrapedExt.has(p.external_id) && pastGrace(p.last_seen_at));
   if (missing.length) {
     if (safeToMarkRemoved(activeBefore, products.length)) {
       for (const batch of chunk(missing, 200)) {
@@ -173,10 +176,10 @@ export async function persistScrape(
   const seenProductIds = [...productIdByExt.values()];
   for (const batch of chunk(seenProductIds, 200)) {
     const active = must(
-      await db.from('variants').select('id').in('product_id', batch).is('removed_at', null),
+      await db.from('variants').select('id, last_seen_at').in('product_id', batch).is('removed_at', null),
       'select variants',
-    ) as { id: string }[];
-    const gone = active.filter((v) => !seenVariantIds.has(v.id)).map((v) => v.id);
+    ) as { id: string; last_seen_at: string }[];
+    const gone = active.filter((v) => !seenVariantIds.has(v.id) && pastGrace(v.last_seen_at)).map((v) => v.id);
     if (gone.length) must(await db.from('variants').update({ removed_at: now }).in('id', gone), 'mark removed variants');
   }
 

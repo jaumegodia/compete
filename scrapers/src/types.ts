@@ -1,4 +1,4 @@
-export type Platform = 'shopify' | 'woocommerce' | 'generic';
+export type Platform = 'shopify' | 'woocommerce' | 'generic' | 'google_shopping';
 
 export interface ScrapedVariant {
   externalId: string;
@@ -31,6 +31,11 @@ export interface ScrapeResult {
   warnings: string[];
   /** Datos de diagnóstico de la ejecución (sitemaps, códigos HTTP, recuentos); se guardan en scrape_runs.diagnostics. */
   diagnostics?: Record<string, unknown>;
+  /**
+   * Días sin ver un producto o variante antes de darlo por retirado (fuentes cuyo resultado varía
+   * de un día a otro, como Google Shopping). Sin valor: se retira en cuanto falta en una captura.
+   */
+  removalGraceDays?: number;
   /** Motivo concreto cuando no se han obtenido productos. */
   error?: string;
 }
@@ -46,4 +51,6 @@ export interface ScrapeOptions {
   log: (msg: string) => void;
   /** Expresiones regulares (sobre la ruta de la URL) para quedarse solo con algunas fichas (sites.include_url_patterns). */
   includeUrlPatterns?: string[] | null;
+  /** Configuración propia de la web (sites.scrape_config), p. ej. el vendedor en Google Shopping. */
+  config?: Record<string, unknown> | null;
 }

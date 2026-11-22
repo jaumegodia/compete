@@ -27,11 +27,16 @@ const opts: ScrapeOptions = {
   log: (m) => console.log(m),
 };
 
-async function scrapeUrl(baseUrl: string, platform: Platform | 'auto', includeUrlPatterns?: string[] | null) {
+async function scrapeUrl(
+  baseUrl: string,
+  platform: Platform | 'auto',
+  includeUrlPatterns?: string[] | null,
+  config?: Record<string, unknown> | null,
+) {
   const resolved = platform === 'auto' ? await detectPlatform(baseUrl) : platform;
   opts.log(`→ ${baseUrl} (${resolved}${platform === 'auto' ? ', detectada' : ''})`);
   if (includeUrlPatterns?.length) opts.log(`  filtro de URLs: ${includeUrlPatterns.join(' | ')}`);
-  return adapters[resolved].scrape(baseUrl, { ...opts, includeUrlPatterns });
+  return adapters[resolved].scrape(baseUrl, { ...opts, includeUrlPatterns, config });
 }
 
 function logPromos(p: PromoSnapshot) {
@@ -52,7 +57,13 @@ async function dryRun(url: string) {
     return;
   }
   const include = value('include');
-  const result = await scrapeUrl(base, (value('platform') as Platform) ?? 'auto', include ? include.split(',') : null);
+  const config = value('config');
+  const result = await scrapeUrl(
+    base,
+    (value('platform') as Platform) ?? 'auto',
+    include ? include.split(',') : null,
+    config ? JSON.parse(config) : null,
+  );
   if (result.error) console.warn(`  ERROR: ${result.error}`);
   if (result.diagnostics) console.log(`  diagnóstico: ${JSON.stringify(result.diagnostics)}`);
   const variants = result.products.reduce((n, p) => n + p.variants.length, 0);
@@ -83,7 +94,7 @@ async function main() {
   }
 
   const db = getDb();
-  let query = db.from('sites').select('id, base_url, platform, currency, include_url_patterns').eq('active', true);
+  let query = db.from('sites').select('id, base_url, platform, currency, include_url_patterns, scrape_config').eq('active', true);
   const only = value('site');
   if (only) query = query.ilike('base_url', `%${only}%`);
   const sites = must(await query, 'select sites') as {
@@ -92,6 +103,7 @@ async function main() {
     platform: Platform | 'auto';
     currency: string;
     include_url_patterns: string[] | null;
+    scrape_config: Record<string, unknown> | null;
   }[];
   if (!sites.length) return console.log('No hay webs activas que capturar.');
 
@@ -104,7 +116,7 @@ async function main() {
     ) as { id: string };
     let diagnostics: Record<string, unknown> | null = null;
     try {
-      const result = await scrapeUrl(base, site.platform, site.include_url_patterns);
+      const result = await scrapeUrl(base, site.platform, site.include_url_patterns, site.scrape_config);
       diagnostics = result.diagnostics ?? null;
       if (!result.products.length) {
         const detail = result.warnings.filter((w) => w !== result.error).slice(0, 3);
