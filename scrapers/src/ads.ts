@@ -1,0 +1,198 @@
+import { dfsRequest, isAuthError, PENDING } from './dataforseo.js';
+import { getDb, must } from './db.js';
+import { sleep } from './http.js';
+import { parseTimestamp } from './reviews.js';
+import { domainOf } from './seo.js';
+
+/**
+ * Actividad publicitaria en Google (Ads Transparency Center vía DataForSEO SERP API, ads_search).
+ *
+ *   npm run ads                    -> todas las webs activas
+ *   npm run ads -- --site emma     -> solo las webs cuya URL contiene "emma"
+ *   npm run ads -- --dry-run       -> llama a la API pero no guarda nada
+ *
+ * Busca por dominio (sites.ads_domain o el de la web sin www), en España y todas las plataformas
+ * (búsqueda, Shopping, YouTube, Display…). ADS_DEPTH: máximo de anuncios por web (700 por defecto).
+ */
+
+const ACTIVE_DAYS = 7;
+
+// ---------- Parseo (puro, probado en test/ads.test.ts) ----------
+
+export interface AdRow {
+  creative_id: string;
+  advertiser_id: string | null;
+  advertiser_name: string | null;
+  format: string | null;
+  url: string | null;
+  preview_url: string | null;
+  first_shown: string | null;
+  last_shown: string | null;
+}
+
+export function parseAds(items: any[]): AdRow[] {
+  const out = new Map<string, AdRow>();
+  for (const i of items ?? []) {
+    if (!i?.creative_id) continue;
+    out.set(i.creative_id, {
+      creative_id: i.creative_id,
+      advertiser_id: i.advertiser_id ?? null,
+      advertiser_name: i.title ?? null,
+      format: i.format ?? null,
+      url: i.url ?? null,
+      preview_url: i.preview_url ?? null,
+      first_shown: parseTimestamp(i.first_shown),
+      last_shown: parseTimestamp(i.last_shown),
+    });
+  }
+  return [...out.values()];
+}
+
+export interface AdSummary {
+  ads_total: number;
+  ads_active: number;
+  ads_new_7d: number;
+  by_format: Record<string, number>;
+  advertisers: { id: string; name: string | null }[];
+}
+
+export function summarizeAds(ads: AdRow[], now = Date.now()): AdSummary {
+  const since = now - ACTIVE_DAYS * 864e5;
+  const active = ads.filter((a) => a.last_shown && new Date(a.last_shown).getTime() >= since);
+  const by_format: Record<string, number> = {};
+  for (const a of active) by_format[a.format ?? 'otro'] = (by_format[a.format ?? 'otro'] ?? 0) + 1;
+  const advertisers = new Map<string, string | null>();
+  for (const a of ads) if (a.advertiser_id && !advertisers.has(a.advertiser_id)) advertisers.set(a.advertiser_id, a.advertiser_name);
+  return {
+    ads_total: ads.length,
+    ads_active: active.length,
+    ads_new_7d: ads.filter((a) => a.first_shown && new Date(a.first_shown).getTime() >= since).length,
+    by_format,
+    advertisers: [...advertisers].map(([id, name]) => ({ id, name })),
+  };
+}
+
+// ---------- DataForSEO (modo task) ----------
+
+const EP = '/serp/google/ads_search';
+
+async function fetchAds(domains: string[], depth: number) {
+  let cost = 0;
+  const results = new Map<string, { items: any[] } | { error: string }>();
+  const posted = await dfsRequest(
+    `${EP}/task_post`,
+    domains.map((target) => ({ target, location_code: 2724, platform: 'all', depth, tag: target })),
+  );
+  cost += Number(posted.cost ?? 0);
+  const pending = new Map<string, string>();
+  for (const t of posted.tasks ?? []) {
+    const domain = t.data?.target ?? t.data?.tag;
+    if (t.status_code === 20100) pending.set(t.id, domain);
+    else results.set(domain, { error: `${t.status_code} ${t.status_message}` });
+  }
+  const deadline = Date.now() + 20 * 60 * 1000;
+  while (pending.size && Date.now() < deadline) {
+    await sleep(15000);
+    for (const [id, domain] of [...pending]) {
+      const got = await dfsRequest(`${EP}/task_get/advanced/${id}`);
+      const t = got.tasks?.[0];
+      if (!t || PENDING.has(t.status_code)) continue;
+      pending.delete(id);
+      cost += Number(t.cost ?? 0);
+      results.set(domain, t.status_code === 20000 ? { items: t.result?.[0]?.items ?? [] } : { error: `${t.status_code} ${t.status_message}` });
+    }
+  }
+  for (const domain of pending.values()) results.set(domain, { error: 'sin resultado tras 20 minutos de espera' });
+  return { results, cost };
+}
+
+// ---------- Ejecución ----------
+
+async function main() {
+  const args = process.argv.slice(2);
+  const dry = args.includes('--dry-run');
+  const siteIdx = args.indexOf('--site');
+  const filter = siteIdx >= 0 ? args[siteIdx + 1] : process.env.SITE || '';
+  const depth = Number(process.env.ADS_DEPTH ?? 700);
+  const today = new Date().toISOString().slice(0, 10);
+  const now = new Date().toISOString();
+
+  const db = getDb();
+  const sites = (
+    must(await db.from('sites').select('id, base_url, ads_domain').eq('active', true).order('created_at'), 'sites') as {
+      id: string;
+      base_url: string;
+      ads_domain: string | null;
+    }[]
+  ).filter((s) => !filter || s.base_url.includes(filter));
+  if (!sites.length) throw new Error(`Ninguna web activa${filter ? ` contiene «${filter}»` : ''}.`);
+
+  const domainOfSite = new Map(sites.map((s) => [s.id, (s.ads_domain || domainOf(s.base_url)).toLowerCase()]));
+  console.log(`Google Ads Transparency: ${sites.length} webs, hasta ${depth} anuncios por web`);
+  let fetched;
+  try {
+    fetched = await fetchAds([...new Set(domainOfSite.values())], depth);
+  } catch (e) {
+    console.error(`error: ${(e as Error).message}`);
+    process.exit(1);
+  }
+
+  let failures = 0;
+  for (const site of sites) {
+    const domain = domainOfSite.get(site.id)!;
+    const got = fetched.results.get(domain);
+    console.log(`→ ${domain}`);
+    if (got && 'error' in got && got.error.startsWith('40102')) {
+      console.log('  sin anuncios en el centro de transparencia');
+      if (!dry)
+        must(
+          await db.from('ad_snapshots').upsert(
+            { site_id: site.id, platform: 'google', captured_on: today, ads_total: 0, ads_active: 0, ads_new_7d: 0, by_format: {}, advertisers: [] },
+            { onConflict: 'site_id,platform,captured_on' },
+          ),
+          'ad_snapshots',
+        );
+      continue;
+    }
+    if (!got || 'error' in got) {
+      failures++;
+      console.error(`  error: ${got && 'error' in got ? got.error : 'sin respuesta'}`);
+      continue;
+    }
+    const ads = parseAds(got.items);
+    const s = summarizeAds(ads);
+    console.log(
+      `  ${s.ads_total} anuncios · ${s.ads_active} activos (7 días) · ${s.ads_new_7d} nuevos · formatos ${JSON.stringify(s.by_format)} · ` +
+        `anunciantes: ${s.advertisers.map((a) => a.name ?? a.id).join(', ') || '—'}`,
+    );
+    if (dry) continue;
+    try {
+      must(
+        await db.from('ad_snapshots').upsert({ site_id: site.id, platform: 'google', captured_on: today, ...s }, { onConflict: 'site_id,platform,captured_on' }),
+        'ad_snapshots',
+      );
+      for (let i = 0; i < ads.length; i += 500) {
+        must(
+          await db.from('ads').upsert(
+            ads.slice(i, i + 500).map((a) => ({ ...a, site_id: site.id, platform: 'google', last_seen_at: now })),
+            { onConflict: 'site_id,platform,creative_id' },
+          ),
+          'ads',
+        );
+      }
+    } catch (e) {
+      failures++;
+      console.error(`  error al guardar: ${(e as Error).message}`);
+      if (isAuthError(e)) break;
+    }
+  }
+  console.log(`Coste DataForSEO: ${fetched.cost.toFixed(4)} $${dry ? ' (sin guardar: --dry-run)' : ''}`);
+  if (failures) process.exitCode = 1;
+}
+
+if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop()!)) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}
