@@ -12,7 +12,7 @@ import { domainOf } from './seo.js';
  *   npm run ads -- --dry-run       -> llama a la API pero no guarda nada
  *
  * Busca por dominio (sites.ads_domain o el de la web sin www), en España y todas las plataformas
- * (búsqueda, Shopping, YouTube, Display…). Solo cuenta como propios los del anunciante de la marca (ver ownAdvertisers). ADS_DEPTH: máximo de anuncios por web (1000 por defecto).
+ * (búsqueda, Shopping, YouTube, Display…). Solo cuenta como propios los del anunciante de la marca (ver ownAdvertisers). ADS_DEPTH: máximo de anuncios por web (700, el máximo que admite la API).
  */
 
 const ACTIVE_DAYS = 7;
@@ -145,7 +145,7 @@ async function main() {
   const dry = args.includes('--dry-run');
   const siteIdx = args.indexOf('--site');
   const filter = siteIdx >= 0 ? args[siteIdx + 1] : process.env.SITE || '';
-  const depth = Number(process.env.ADS_DEPTH ?? 1000);
+  const depth = Number(Math.min(Number(process.env.ADS_DEPTH ?? 700), 700));
   const today = new Date().toISOString().slice(0, 10);
   const now = new Date().toISOString();
 
