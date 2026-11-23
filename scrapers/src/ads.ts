@@ -48,14 +48,30 @@ export function parseAds(items: any[]): AdRow[] {
   return [...out.values()];
 }
 
+const norm = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
 /**
- * Anunciantes propios de la marca: los indicados en sites.ads_advertiser_ids o, si no hay, el que más anuncios tiene
- * para ese dominio. El resto son terceros (distribuidores, afiliados o suplantaciones).
+ * Anunciantes propios de la marca, por orden de preferencia:
+ *  1. los indicados en sites.ads_advertiser_ids;
+ *  2. los anunciantes cuyo nombre contiene la marca del dominio («flex» en flex.es, «emma» en emma-colchon.es);
+ *  3. si ninguno coincide, el que más anuncios tiene para ese dominio.
+ * El resto son terceros (agencias de terceros, distribuidores, afiliados o suplantaciones).
  */
-export function ownAdvertisers(ads: AdRow[], configured: string[] | null): Set<string> {
+export function ownAdvertisers(ads: AdRow[], configured: string[] | null, domain?: string): Set<string> {
   if (configured?.length) return new Set(configured);
   const counts = new Map<string, number>();
-  for (const a of ads) if (a.advertiser_id) counts.set(a.advertiser_id, (counts.get(a.advertiser_id) ?? 0) + 1);
+  const names = new Map<string, string>();
+  for (const a of ads) {
+    if (!a.advertiser_id) continue;
+    counts.set(a.advertiser_id, (counts.get(a.advertiser_id) ?? 0) + 1);
+    if (a.advertiser_name) names.set(a.advertiser_id, norm(a.advertiser_name));
+  }
+  if (domain) {
+    const label = domain.replace(/^www\./, '').split('.')[0];
+    const tokens = [norm(label), ...label.split('-').map(norm)].filter((t) => t.length >= 4);
+    const matching = [...names].filter(([, name]) => tokens.some((t) => name.includes(t))).map(([id]) => id);
+    if (matching.length) return new Set(matching);
+  }
   const top = [...counts].sort((a, b) => b[1] - a[1])[0];
   return new Set(top ? [top[0]] : []);
 }
@@ -193,7 +209,7 @@ async function main() {
       continue;
     }
     const ads = parseAds(got.items);
-    const own = ownAdvertisers(ads, site.ads_advertiser_ids);
+    const own = ownAdvertisers(ads, site.ads_advertiser_ids, domain);
     const s = summarizeAds(ads, own);
     console.log(
       `  ${s.ads_total} anuncios · ${s.ads_active} activos (7 días) · ${s.ads_new_7d} nuevos · formatos ${JSON.stringify(s.by_format)} · ` +

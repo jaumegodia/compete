@@ -37,6 +37,17 @@ describe('Publicidad: Google Ads Transparency', () => {
     expect([...ownAdvertisers(ads, ['AR_X', 'AR_Y'])]).toEqual(['AR_X', 'AR_Y']);
   });
 
+  it('prefiere el anunciante cuyo nombre coincide con la marca del dominio', () => {
+    const ads = parseAds([
+      ...Array.from({ length: 5 }, (_, i) => ad(`P${i}`, 'AR_PIX', 'Pixidis SARLU', 'image', '2026-11-01 10:00:00 +00:00', '2026-11-22 08:00:00 +00:00')),
+      ad('F1', 'AR_FLEX', 'FLEX EQUIPOS DE DESCANSO SA', 'text', '2026-11-01 10:00:00 +00:00', '2026-11-22 08:00:00 +00:00'),
+    ]);
+    expect([...ownAdvertisers(ads, null, 'flex.es')]).toEqual(['AR_FLEX']);
+    expect([...ownAdvertisers(parseAds(items), null, 'emma-colchon.es')]).toEqual(['AR_EMMA']);
+    // sin coincidencia de nombre (comounamarmota → ECOM DIGITAL FACTORY): el que más anuncios tiene
+    expect([...ownAdvertisers(ads, null, 'comounamarmota.com')]).toEqual(['AR_PIX']);
+  });
+
   it('resume solo los propios y cuenta aparte los terceros', () => {
     const ads = parseAds(items);
     const s = summarizeAds(ads, ownAdvertisers(ads, null), NOW);
