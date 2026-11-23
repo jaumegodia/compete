@@ -14,20 +14,34 @@ export type TrafficPoint = { month: string } & Record<string, number | string | 
 const int = (v: number) => v.toLocaleString('es-ES', { maximumFractionDigits: 0 });
 const compact = (v: number) => v.toLocaleString('es-ES', { notation: 'compact', maximumFractionDigits: 1 });
 const month = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('es-ES', { month: 'short', year: '2-digit' });
+const week = (d: string) => `Semana del ${new Date(`${d}T12:00:00Z`).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`;
+const weekTick = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
 
-/** Evolución mensual de una métrica de tráfico, una línea por marca (color fijo por marca). */
-export function TrafficChart({ data, series, label }: { data: TrafficPoint[]; series: TrafficSeries[]; label: string }) {
+/** Evolución mensual (o semanal) de una métrica, una línea por marca (color fijo por marca). */
+export function TrafficChart({
+  data,
+  series,
+  label,
+  period = 'month',
+}: {
+  data: TrafficPoint[];
+  series: TrafficSeries[];
+  label: string;
+  period?: 'month' | 'week';
+}) {
+  const tick = period === 'week' ? weekTick : month;
+  const title = period === 'week' ? week : month;
   if (data.length < 2) return <p className="py-8 text-center text-sm text-ink-3">Todavía no hay histórico suficiente.</p>;
   return (
     <div className="h-72 w-full" role="img" aria-label={label}>
       <ResponsiveContainer>
         <LineChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
           <CartesianGrid stroke="#ecebe7" vertical={false} />
-          <XAxis dataKey="month" tickFormatter={month} tick={{ fontSize: 12, fill: '#52514e' }} axisLine={{ stroke: '#d9d8d3' }} tickLine={false} minTickGap={24} />
+          <XAxis dataKey="month" tickFormatter={tick} tick={{ fontSize: 12, fill: '#52514e' }} axisLine={{ stroke: '#d9d8d3' }} tickLine={false} minTickGap={24} />
           <YAxis tickFormatter={compact} tick={{ fontSize: 12, fill: '#52514e' }} axisLine={false} tickLine={false} width={56} />
           <Tooltip
             formatter={(v) => (typeof v === 'number' ? int(v) : '—')}
-            labelFormatter={(d) => month(String(d))}
+            labelFormatter={(d) => title(String(d))}
             contentStyle={{ borderRadius: 8, border: '1px solid #e6e5e1', fontSize: 13 }}
             cursor={{ stroke: '#8a8a85', strokeDasharray: '3 3' }}
           />

@@ -104,6 +104,18 @@ update sites set trustpilot_domain = 'emma-sleep.com' where base_url = 'https://
 
 Workflow **Reseñas (Trustpilot vía DataForSEO)**: cada lunes y a mano. Panel: **Reseñas** (`/resenas`).
 
+### Publicidad (Google Ads Transparency)
+
+`npm run ads` consulta el centro de transparencia de anuncios de Google (DataForSEO SERP API, `ads_search`) por el dominio de cada web activa, en España y en todas las plataformas (búsqueda, Shopping, YouTube, Display). Guarda cada anuncio en `ads` (formato, primera y última vez que se mostró) y un resumen diario en `ad_snapshots`: anuncios activos (mostrados en los últimos 7 días), nuevos, por formato, y los de terceros.
+
+Al buscar por dominio salen también anunciantes que enlazan a la web (distribuidores, afiliados, suplantaciones). Se cuentan como propios solo los del anunciante con más anuncios; si no es el correcto o la marca tiene varios:
+
+```sql
+update sites set ads_advertiser_ids = '{AR11515220324631183361}' where base_url = 'https://www.maxcolchon.com';
+```
+
+`sites.ads_domain` cambia el dominio de búsqueda. Workflow **Publicidad (Google Ads Transparency)**: cada día (~0,10 $). Panel: **Publicidad** (`/publicidad`). Google no publica inversión ni impresiones de anuncios comerciales; la actividad (volumen y ritmo de anuncios) es lo medible.
+
 ### Promociones de la home
 
 Con la Directiva Ómnibus muchas marcas no publican precios tachados, pero sí anuncian su descuento en la home. Cada día se lee la home de cada web y se guarda en `site_promotions`:
@@ -135,6 +147,7 @@ Migraciones en `supabase/migrations/`, datos del piloto en `supabase/seed.sql`.
 | `events` | Cambios detectados (alimentan alertas y resumen semanal) |
 | `domain_metrics` | Tráfico y SEO por web y mes (DataForSEO Labs) |
 | `domain_keywords` | Top keywords orgánicas de cada web, una foto por ejecución |
+| `ads`, `ad_snapshots` | Anuncios de Google de cada marca y resumen diario de actividad |
 | `review_snapshots`, `reviews` | Nota y nº de reseñas de Trustpilot por fecha, y las reseñas recientes |
 
 RLS está activado en todas las tablas y todavía sin políticas: solo el scraper (con la clave `service_role`) puede leer y escribir. Las políticas para usuarios se añadirán con el frontend.

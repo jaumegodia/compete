@@ -11,6 +11,7 @@ const NAV = [
   { href: '/promociones', label: 'Promociones' },
   { href: '/trafico', label: 'Tráfico y SEO' },
   { href: '/resenas', label: 'Reseñas' },
+  { href: '/publicidad', label: 'Publicidad' },
   { href: '/marcas', label: 'Marcas y webs' },
   { href: '/capturas', label: 'Capturas' },
 ];

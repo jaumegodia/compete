@@ -12,7 +12,7 @@ import { domainOf } from './seo.js';
  *   npm run ads -- --dry-run       -> llama a la API pero no guarda nada
  *
  * Busca por dominio (sites.ads_domain o el de la web sin www), en España y todas las plataformas
- * (búsqueda, Shopping, YouTube, Display…). ADS_DEPTH: máximo de anuncios por web (700 por defecto).
+ * (búsqueda, Shopping, YouTube, Display…). Solo cuenta como propios los del anunciante de la marca (ver ownAdvertisers). ADS_DEPTH: máximo de anuncios por web (1000 por defecto).
  */
 
 const ACTIVE_DAYS = 7;
@@ -48,15 +48,31 @@ export function parseAds(items: any[]): AdRow[] {
   return [...out.values()];
 }
 
+/**
+ * Anunciantes propios de la marca: los indicados en sites.ads_advertiser_ids o, si no hay, el que más anuncios tiene
+ * para ese dominio. El resto son terceros (distribuidores, afiliados o suplantaciones).
+ */
+export function ownAdvertisers(ads: AdRow[], configured: string[] | null): Set<string> {
+  if (configured?.length) return new Set(configured);
+  const counts = new Map<string, number>();
+  for (const a of ads) if (a.advertiser_id) counts.set(a.advertiser_id, (counts.get(a.advertiser_id) ?? 0) + 1);
+  const top = [...counts].sort((a, b) => b[1] - a[1])[0];
+  return new Set(top ? [top[0]] : []);
+}
+
 export interface AdSummary {
   ads_total: number;
   ads_active: number;
   ads_new_7d: number;
   by_format: Record<string, number>;
   advertisers: { id: string; name: string | null }[];
+  third_party_active: number;
+  third_party: { id: string; name: string | null; active: number }[];
 }
 
-export function summarizeAds(ads: AdRow[], now = Date.now()): AdSummary {
+/** Resumen de los anuncios propios; los de terceros solo se cuentan. */
+export function summarizeAds(all: AdRow[], own: Set<string>, now = Date.now()): AdSummary {
+  const ads = all.filter((a) => a.advertiser_id && own.has(a.advertiser_id));
   const since = now - ACTIVE_DAYS * 864e5;
   const active = ads.filter((a) => a.last_shown && new Date(a.last_shown).getTime() >= since);
   const by_format: Record<string, number> = {};
@@ -69,7 +85,23 @@ export function summarizeAds(ads: AdRow[], now = Date.now()): AdSummary {
     ads_new_7d: ads.filter((a) => a.first_shown && new Date(a.first_shown).getTime() >= since).length,
     by_format,
     advertisers: [...advertisers].map(([id, name]) => ({ id, name })),
+    ...thirdParty(all.filter((a) => !a.advertiser_id || !own.has(a.advertiser_id)), since),
   };
+}
+
+function thirdParty(ads: AdRow[], since: number) {
+  const by = new Map<string, { id: string; name: string | null; active: number }>();
+  let activeTotal = 0;
+  for (const a of ads) {
+    const id = a.advertiser_id ?? '?';
+    const e = by.get(id) ?? { id, name: a.advertiser_name, active: 0 };
+    by.set(id, e);
+    if (a.last_shown && new Date(a.last_shown).getTime() >= since) {
+      e.active++;
+      activeTotal++;
+    }
+  }
+  return { third_party_active: activeTotal, third_party: [...by.values()].filter((e) => e.active > 0).sort((a, b) => b.active - a.active) };
 }
 
 // ---------- DataForSEO (modo task) ----------
@@ -113,16 +145,17 @@ async function main() {
   const dry = args.includes('--dry-run');
   const siteIdx = args.indexOf('--site');
   const filter = siteIdx >= 0 ? args[siteIdx + 1] : process.env.SITE || '';
-  const depth = Number(process.env.ADS_DEPTH ?? 700);
+  const depth = Number(process.env.ADS_DEPTH ?? 1000);
   const today = new Date().toISOString().slice(0, 10);
   const now = new Date().toISOString();
 
   const db = getDb();
   const sites = (
-    must(await db.from('sites').select('id, base_url, ads_domain').eq('active', true).order('created_at'), 'sites') as {
+    must(await db.from('sites').select('id, base_url, ads_domain, ads_advertiser_ids').eq('active', true).order('created_at'), 'sites') as {
       id: string;
       base_url: string;
       ads_domain: string | null;
+      ads_advertiser_ids: string[] | null;
     }[]
   ).filter((s) => !filter || s.base_url.includes(filter));
   if (!sites.length) throw new Error(`Ninguna web activa${filter ? ` contiene «${filter}»` : ''}.`);
@@ -147,7 +180,7 @@ async function main() {
       if (!dry)
         must(
           await db.from('ad_snapshots').upsert(
-            { site_id: site.id, platform: 'google', captured_on: today, ads_total: 0, ads_active: 0, ads_new_7d: 0, by_format: {}, advertisers: [] },
+            { site_id: site.id, platform: 'google', captured_on: today, ads_total: 0, ads_active: 0, ads_new_7d: 0, by_format: {}, advertisers: [], third_party_active: 0, third_party: [] },
             { onConflict: 'site_id,platform,captured_on' },
           ),
           'ad_snapshots',
@@ -160,11 +193,14 @@ async function main() {
       continue;
     }
     const ads = parseAds(got.items);
-    const s = summarizeAds(ads);
+    const own = ownAdvertisers(ads, site.ads_advertiser_ids);
+    const s = summarizeAds(ads, own);
     console.log(
       `  ${s.ads_total} anuncios · ${s.ads_active} activos (7 días) · ${s.ads_new_7d} nuevos · formatos ${JSON.stringify(s.by_format)} · ` +
-        `anunciantes: ${s.advertisers.map((a) => a.name ?? a.id).join(', ') || '—'}`,
+        `anunciante: ${s.advertisers.map((a) => `${a.name ?? '?'} (${a.id})`).join(', ') || '—'}`,
     );
+    if (s.third_party.length)
+      console.log(`  terceros activos: ${s.third_party.map((t) => `${t.name ?? t.id} ${t.active}`).join(' · ')}`);
     if (dry) continue;
     try {
       must(
@@ -174,7 +210,7 @@ async function main() {
       for (let i = 0; i < ads.length; i += 500) {
         must(
           await db.from('ads').upsert(
-            ads.slice(i, i + 500).map((a) => ({ ...a, site_id: site.id, platform: 'google', last_seen_at: now })),
+            ads.slice(i, i + 500).map((a) => ({ ...a, own: !!a.advertiser_id && own.has(a.advertiser_id), site_id: site.id, platform: 'google', last_seen_at: now })),
             { onConflict: 'site_id,platform,creative_id' },
           ),
           'ads',
