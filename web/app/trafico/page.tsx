@@ -259,7 +259,7 @@ export default async function Trafico({
               <Link
                 key={b.id}
                 href={link({ marca: b.id })}
-                className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs ${b.id === kwBrand?.id ? 'border-accent text-accent' : 'border-line text-ink-2 hover:bg-[#f1f0ec]'}`}
+                className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs ${b.id === kwBrand?.id ? 'border-accent text-accent' : 'border-line text-ink-2 hover:bg-hover'}`}
               >
                 <BrandDot color={colors[b.id]} />
                 {b.name}

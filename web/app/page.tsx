@@ -96,7 +96,7 @@ export default async function Home() {
         <EventsTable
           events={events}
           brandName={(id) => byId.get(id)?.name ?? '—'}
-          brandColor={(id) => colors[id] ?? '#8a8a85'}
+          brandColor={(id) => colors[id] ?? '#8a93a6'}
         />
       </Card>
     </>

@@ -34,7 +34,7 @@ export const diffPct = (a: number, b: number) => (b ? Math.round(((a - b) / b) *
 export const SERIES = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'];
 export function brandColors(brands: { id: string; is_own: boolean; created_at: string }[]): Record<string, string> {
   const ordered = [...brands].sort((a, b) => Number(b.is_own) - Number(a.is_own) || a.created_at.localeCompare(b.created_at));
-  return Object.fromEntries(ordered.map((b, i) => [b.id, SERIES[i] ?? '#8a8a85']));
+  return Object.fromEntries(ordered.map((b, i) => [b.id, SERIES[i] ?? '#8a93a6']));
 }
 
 export const EVENT_LABELS: Record<string, string> = {

@@ -28,8 +28,8 @@ export default async function Marcas({ searchParams }: { searchParams: Promise<{
         }
       />
 
-      {ok && <div className="mb-4 rounded-md border border-[#bfe3cb] bg-[#eef8f1] px-4 py-2.5 text-sm text-good">{ok}</div>}
-      {error && <div className="mb-4 rounded-md border border-[#f2c5c1] bg-[#fdf1f0] px-4 py-2.5 text-sm text-bad">{error}</div>}
+      {ok && <div className="mb-4 rounded-md border border-good-line bg-good-soft px-4 py-2.5 text-sm text-good">{ok}</div>}
+      {error && <div className="mb-4 rounded-md border border-bad-line bg-bad-soft px-4 py-2.5 text-sm text-bad">{error}</div>}
 
       <div className="flex flex-col gap-4">
         {brands.map((b) => {
@@ -107,7 +107,7 @@ export default async function Marcas({ searchParams }: { searchParams: Promise<{
                                 <input type="hidden" name="competitor_id" value={c.id} />
                                 <input type="hidden" name="linked" value={String(linked)} />
                                 <button
-                                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${linked ? 'border-accent bg-[#e1edfb] text-ink' : 'border-line text-ink-3'}`}
+                                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${linked ? 'border-accent bg-accent-soft text-ink' : 'border-line text-ink-3'}`}
                                   title={linked ? 'Quitar de la comparación' : 'Añadir a la comparación'}
                                 >
                                   <BrandDot color={colors[c.id]} />

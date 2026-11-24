@@ -248,7 +248,7 @@ export default async function Publicidad({ searchParams }: { searchParams: Promi
                   <tr key={`${a.site_id}-${a.creative_id}`}>
                     <td className="whitespace-nowrap">
                       <span className="inline-flex items-center gap-2">
-                        <BrandDot color={colors[brandId] ?? '#8a8a85'} />
+                        <BrandDot color={colors[brandId] ?? '#8a93a6'} />
                         {brands.find((b) => b.id === brandId)?.name}
                       </span>
                     </td>

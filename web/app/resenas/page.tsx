@@ -204,7 +204,7 @@ export default async function Resenas({ searchParams }: { searchParams: Promise<
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge tone={tone}>{stars(r.rating)}</Badge>
                     <span className="inline-flex items-center gap-1.5 text-ink-2">
-                      <BrandDot color={colors[brandId] ?? '#8a8a85'} />
+                      <BrandDot color={colors[brandId] ?? '#8a93a6'} />
                       {brand?.name ?? sitesById.get(r.site_id)?.base_url}
                     </span>
                     <span className="text-xs text-ink-3">

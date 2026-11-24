@@ -36,14 +36,14 @@ export function TrafficChart({
     <div className="h-72 w-full" role="img" aria-label={label}>
       <ResponsiveContainer>
         <LineChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
-          <CartesianGrid stroke="#ecebe7" vertical={false} />
-          <XAxis dataKey="month" tickFormatter={tick} tick={{ fontSize: 12, fill: '#52514e' }} axisLine={{ stroke: '#d9d8d3' }} tickLine={false} minTickGap={24} />
-          <YAxis tickFormatter={compact} tick={{ fontSize: 12, fill: '#52514e' }} axisLine={false} tickLine={false} width={56} />
+          <CartesianGrid stroke="#eceef2" vertical={false} />
+          <XAxis dataKey="month" tickFormatter={tick} tick={{ fontSize: 12, fill: '#4a5468' }} axisLine={{ stroke: '#cdd2db' }} tickLine={false} minTickGap={24} />
+          <YAxis tickFormatter={compact} tick={{ fontSize: 12, fill: '#4a5468' }} axisLine={false} tickLine={false} width={56} />
           <Tooltip
             formatter={(v) => (typeof v === 'number' ? int(v) : '—')}
             labelFormatter={(d) => title(String(d))}
-            contentStyle={{ borderRadius: 8, border: '1px solid #e6e5e1', fontSize: 13 }}
-            cursor={{ stroke: '#8a8a85', strokeDasharray: '3 3' }}
+            contentStyle={{ borderRadius: 8, border: '1px solid #e3e6ec', fontSize: 13 }}
+            cursor={{ stroke: '#8a93a6', strokeDasharray: '3 3' }}
           />
           <Legend wrapperStyle={{ fontSize: 12 }} />
           {series.map((s) => (
