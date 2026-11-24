@@ -115,7 +115,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
         <Card title="Ficha">
           {product.image_url && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={product.image_url} alt="" className="mb-3 aspect-[4/3] w-full rounded-md bg-[#f1f0ec] object-cover" />
+            <img src={product.image_url} alt="" className="mb-3 aspect-[4/3] w-full rounded-md bg-sunken object-cover" />
           )}
           <dl className="grid grid-cols-2 gap-2 text-sm">
             <dt className="text-ink-2">Variantes</dt>
@@ -143,7 +143,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
             {activeVariants.map((x) => {
               const disc = x.current_compare_at_price && x.current_price ? (100 * (x.current_compare_at_price - x.current_price)) / x.current_compare_at_price : null;
               return (
-                <tr key={x.id} className={x.id === chosen?.id ? 'bg-[#eef4fc]' : ''}>
+                <tr key={x.id} className={x.id === chosen?.id ? 'bg-own' : ''}>
                   <td>
                     <Link href={`/productos/${id}?v=${x.id}`} className="text-accent hover:underline">
                       {x.title ?? 'Única'}
@@ -162,7 +162,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
       </Card>
 
       <Card title="Cambios de este producto" className="mt-4">
-        <EventsTable events={events} brandName={(b) => brands.find((x) => x.id === b)?.name ?? '—'} brandColor={(b) => colors[b] ?? '#8a8a85'} />
+        <EventsTable events={events} brandName={(b) => brands.find((x) => x.id === b)?.name ?? '—'} brandColor={(b) => colors[b] ?? '#8a93a6'} />
       </Card>
     </>
   );

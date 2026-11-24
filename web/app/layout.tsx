@@ -1,47 +1,37 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { GeistMono } from 'geist/font/mono';
+import { GeistSans } from 'geist/font/sans';
+import { Logo } from '@/components/logo';
+import { SideNav, TopNav } from '@/components/nav';
 import './globals.css';
 
 export const metadata: Metadata = { title: 'COMPETE', description: 'Inteligencia competitiva para e-commerce' };
 
-const NAV = [
-  { href: '/', label: 'Resumen' },
-  { href: '/informe', label: 'Informe diario' },
-  { href: '/comparativa', label: 'Comparativa' },
-  { href: '/promociones', label: 'Promociones' },
-  { href: '/trafico', label: 'Tráfico y SEO' },
-  { href: '/resenas', label: 'Reseñas' },
-  { href: '/publicidad', label: 'Publicidad' },
-  { href: '/marcas', label: 'Marcas y webs' },
-  { href: '/capturas', label: 'Capturas' },
-];
-
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es">
-      <body className="min-h-screen antialiased">
+    <html lang="es" className={`${GeistSans.variable} ${GeistMono.variable}`}>
+      <body className="min-h-screen font-sans antialiased">
         <div className="flex min-h-screen">
-          <aside className="hidden w-52 shrink-0 border-r border-line bg-surface px-3 py-5 md:block">
-            <Link href="/" className="mb-6 block px-2 text-base font-bold tracking-tight">
-              COMPETE
+          <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col bg-night px-3 py-5 md:flex">
+            <Link href="/" className="mb-8 block px-2">
+              <Logo size={28} />
             </Link>
-            <nav className="flex flex-col gap-0.5">
-              {NAV.map((n) => (
-                <Link key={n.href} href={n.href} className="rounded-md px-2 py-1.5 text-sm text-ink-2 hover:bg-[#f1f0ec] hover:text-ink">
-                  {n.label}
-                </Link>
-              ))}
-            </nav>
+            <SideNav />
+            <div className="mt-auto px-2.5 text-[11px] leading-relaxed text-night-ink/60">
+              Inteligencia competitiva
+              <br />
+              para e-commerce
+            </div>
           </aside>
           <div className="min-w-0 flex-1">
-            <nav className="flex gap-3 overflow-x-auto border-b border-line bg-surface px-4 py-2 text-sm md:hidden">
-              {NAV.map((n) => (
-                <Link key={n.href} href={n.href} className="whitespace-nowrap text-ink-2">
-                  {n.label}
-                </Link>
-              ))}
-            </nav>
-            <main className="mx-auto max-w-6xl px-4 py-6 md:px-8 md:py-8">{children}</main>
+            <header className="bg-night md:hidden">
+              <Link href="/" className="block px-4 pb-2 pt-3">
+                <Logo size={24} />
+              </Link>
+              <TopNav />
+            </header>
+            <main className="mx-auto max-w-6xl px-4 py-6 md:px-10 md:py-10">{children}</main>
           </div>
         </div>
       </body>

@@ -205,7 +205,7 @@ export default async function Comparativa({
                 const isOwn = s.id === brand.id;
                 const d = !isOwn && s.med !== null && ownMedian !== null ? diffPct(s.med, ownMedian) : null;
                 return (
-                  <tr key={s.id} className={isOwn ? 'bg-[#eef4fc]' : ''}>
+                  <tr key={s.id} className={isOwn ? 'bg-own' : ''}>
                     <td className="whitespace-nowrap">
                       <span className="inline-flex items-center gap-1.5">
                         <BrandDot color={colors[s.id]} />
@@ -247,7 +247,7 @@ export default async function Comparativa({
                 const near = isOwn ? null : nearestOwn(r);
                 const d = near ? diffPct(r.price, near.price) : null;
                 return (
-                  <tr key={r.id} className={isOwn ? 'bg-[#eef4fc]' : ''}>
+                  <tr key={r.id} className={isOwn ? 'bg-own' : ''}>
                     <td className="whitespace-nowrap">
                       <span className="inline-flex items-center gap-1.5">
                         <BrandDot color={colors[r.brandId]} />

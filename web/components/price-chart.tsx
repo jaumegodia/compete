@@ -25,14 +25,14 @@ export function PriceChart({ data, label }: { data: PricePoint[]; label: string 
     <div className="h-64 w-full" role="img" aria-label={`Evolución del precio: ${label}`}>
       <ResponsiveContainer>
         <LineChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
-          <CartesianGrid stroke="#ecebe7" vertical={false} />
-          <XAxis dataKey="date" tickFormatter={day} tick={{ fontSize: 12, fill: '#52514e' }} axisLine={{ stroke: '#d9d8d3' }} tickLine={false} minTickGap={24} />
-          <YAxis tickFormatter={eur} tick={{ fontSize: 12, fill: '#52514e' }} axisLine={false} tickLine={false} width={72} domain={['auto', 'auto']} />
+          <CartesianGrid stroke="#eceef2" vertical={false} />
+          <XAxis dataKey="date" tickFormatter={day} tick={{ fontSize: 12, fill: '#4a5468' }} axisLine={{ stroke: '#cdd2db' }} tickLine={false} minTickGap={24} />
+          <YAxis tickFormatter={eur} tick={{ fontSize: 12, fill: '#4a5468' }} axisLine={false} tickLine={false} width={72} domain={['auto', 'auto']} />
           <Tooltip
             formatter={(v) => (typeof v === 'number' ? eur(v) : String(v ?? '—'))}
             labelFormatter={(d) => day(String(d))}
-            contentStyle={{ borderRadius: 8, border: '1px solid #e6e5e1', fontSize: 13 }}
-            cursor={{ stroke: '#8a8a85', strokeDasharray: '3 3' }}
+            contentStyle={{ borderRadius: 8, border: '1px solid #e3e6ec', fontSize: 13 }}
+            cursor={{ stroke: '#8a93a6', strokeDasharray: '3 3' }}
           />
           {hasCompare && <Legend wrapperStyle={{ fontSize: 12 }} />}
           <Line type="stepAfter" dataKey="price" name="Precio" stroke="#2a78d6" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 5 }} connectNulls />
