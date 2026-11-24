@@ -38,7 +38,7 @@ export function SideNav() {
     <nav className="flex flex-col gap-5">
       {NAV_GROUPS.map((g) => (
         <div key={g.label}>
-          <div className="mb-1.5 px-2.5 text-[11px] font-medium uppercase tracking-[0.08em] text-night-ink/50">{g.label}</div>
+          <div className="mb-1.5 px-2.5 text-[11px] font-medium uppercase tracking-[0.08em] text-night-ink/60">{g.label}</div>
           <div className="flex flex-col gap-0.5">
             {g.items.map((n) => {
               const active = isActive(path, n.href);

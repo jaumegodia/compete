@@ -18,7 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Logo size={28} />
             </Link>
             <SideNav />
-            <div className="mt-auto px-2.5 text-[11px] leading-relaxed text-night-ink/50">
+            <div className="mt-auto px-2.5 text-[11px] leading-relaxed text-night-ink/60">
               Inteligencia competitiva
               <br />
               para e-commerce
