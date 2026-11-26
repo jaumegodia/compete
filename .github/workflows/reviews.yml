@@ -2,7 +2,7 @@ name: Reseñas (Trustpilot vía DataForSEO)
 
 on:
   schedule:
-    - cron: '41 5 * * 1' # cada lunes a las 05:41 UTC
+    - cron: '41 5 * * *' # cada día a las 05:41 UTC
   workflow_dispatch:
     inputs:
       site:
@@ -12,7 +12,7 @@ on:
       depth:
         description: 'Reseñas más recientes por web (se cobra por cada 20)'
         required: false
-        default: '100'
+        default: '40'
       dry:
         description: 'Solo prueba: llama a la API pero no guarda en Supabase'
         type: boolean
@@ -40,6 +40,6 @@ jobs:
           DATAFORSEO_LOGIN: ${{ secrets.DATAFORSEO_LOGIN }}
           DATAFORSEO_PASSWORD: ${{ secrets.DATAFORSEO_PASSWORD }}
           SITE: ${{ inputs.site }}
-          REVIEWS_DEPTH: ${{ inputs.depth || '100' }}
+          REVIEWS_DEPTH: ${{ inputs.depth || '40' }} # a diario 40 bastan (≈5 nuevas/día por marca)
         run: |
           if [ "${{ inputs.dry }}" = "true" ]; then npm run reviews:dry; else npm run reviews; fi
