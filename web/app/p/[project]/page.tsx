@@ -7,8 +7,9 @@ import { getEvents, getRuns } from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Home({ params }: { params: Promise<{ project: string }> }) {
+export default async function Home({ params, searchParams }: { params: Promise<{ project: string }>; searchParams: Promise<{ bienvenida?: string }> }) {
   const { brands, siteIds, path } = await getProject((await params).project);
+  const welcome = (await searchParams).bienvenida === '1';
   const [events, runs] = await Promise.all([
     getEvents(siteIds, new Date(Date.now() - 7 * 864e5).toISOString(), new Date(Date.now() + 864e5).toISOString(), 40),
     getRuns(siteIds, 12),
@@ -29,6 +30,14 @@ export default async function Home({ params }: { params: Promise<{ project: stri
           </Link>
         }
       />
+
+      {(welcome || visible.length === 0) && (
+        <div className="mb-4 rounded-md border border-good-line bg-good-soft px-4 py-3 text-sm text-good">
+          <strong>Tu proyecto está en marcha.</strong> Estamos capturando las webs por primera vez: según el tamaño de cada catálogo
+          tarda de unos minutos a una hora. Puedes seguir el avance en <Link href={path('/capturas')} className="underline">Capturas</Link>.
+          Los cambios de precio, stock y promociones aparecen a partir de mañana.
+        </div>
+      )}
 
       {visible.length === 0 ? (
         <Card>

@@ -53,7 +53,7 @@ export function ProjectSwitcher({
   const router = useRouter();
   const section = path.split('/')[3] ?? '';
   const go = (slug: string) => {
-    if (slug === '__new') return router.push(`/p/${current}/marcas#nuevo-proyecto`);
+    if (slug === '__new') return router.push('/empezar');
     const keep = section && section !== 'productos' ? `/${section}` : '';
     router.push(`/p/${slug}${keep}`);
   };

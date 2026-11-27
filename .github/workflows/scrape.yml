@@ -12,12 +12,14 @@ on:
         options: [full, dry, promos]
         default: full
       site:
-        description: 'Filtrar por texto de la URL (vacío = todas). En modo dry, URLs separadas por espacios.'
+        description: 'Filtrar por texto de la URL, varios separados por comas (vacío = todas). En modo dry, URLs separadas por espacios.'
         required: false
         default: ''
 
+# Una captura completa a la vez; las de webs concretas (altas de clientes nuevos) van en su propio grupo
+# para que dos altas seguidas no se cancelen entre sí (GitHub solo deja una ejecución pendiente por grupo).
 concurrency:
-  group: scrape
+  group: scrape-${{ inputs.site || 'all' }}
   cancel-in-progress: false
 
 jobs:

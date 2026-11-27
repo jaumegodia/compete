@@ -1,5 +1,5 @@
 import { dfsRequest, isAuthError, PENDING } from './dataforseo.js';
-import { getDb, must } from './db.js';
+import { getDb, must, demandedSiteIds, matchesSiteFilter } from './db.js';
 import { sleep } from './http.js';
 import { parseTimestamp } from './reviews.js';
 import { domainOf } from './seo.js';
@@ -166,6 +166,7 @@ async function main() {
   const now = new Date().toISOString();
 
   const db = getDb();
+  const demanded = await demandedSiteIds(db, 'ads');
   const sites = (
     must(await db.from('sites').select('id, base_url, ads_domain, ads_advertiser_ids').eq('active', true).order('created_at'), 'sites') as {
       id: string;
@@ -173,7 +174,7 @@ async function main() {
       ads_domain: string | null;
       ads_advertiser_ids: string[] | null;
     }[]
-  ).filter((s) => !filter || s.base_url.includes(filter));
+  ).filter((s) => demanded.has(s.id) && matchesSiteFilter(s.base_url, filter));
   if (!sites.length) throw new Error(`Ninguna web activa${filter ? ` contiene «${filter}»` : ''}.`);
 
   const domainOfSite = new Map(sites.map((s) => [s.id, (s.ads_domain || domainOf(s.base_url)).toLowerCase()]));

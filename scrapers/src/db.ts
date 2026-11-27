@@ -33,3 +33,20 @@ export function must<T>(res: { data: T | null; error: { message: string } | null
   if (res.error) throw new Error(`${what}: ${res.error.message}`);
   return res.data as T;
 }
+
+export type Module = 'catalog' | 'promos' | 'reviews' | 'ads' | 'seo';
+
+/**
+ * Webs que algún proyecto vivo sigue sin pausar y cuyo plan incluye el módulo (vista v_site_demand).
+ * Así una web que ningún cliente sigue, o que solo siguen clientes sin ese módulo, no gasta captura.
+ */
+export async function demandedSiteIds(db: SupabaseClient, module: Module): Promise<Set<string>> {
+  const rows = must(await db.from('v_site_demand').select('site_id').eq(`want_${module}`, true), 'v_site_demand') as { site_id: string }[];
+  return new Set(rows.map((r) => r.site_id));
+}
+
+/** Filtro --site: uno o varios trozos de URL separados por comas o espacios ("emma, flex.es"). */
+export function matchesSiteFilter(baseUrl: string, filter: string | undefined | null): boolean {
+  const parts = (filter ?? '').split(/[\s,]+/).filter(Boolean);
+  return !parts.length || parts.some((p) => baseUrl.toLowerCase().includes(p.toLowerCase()));
+}

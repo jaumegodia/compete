@@ -1,4 +1,4 @@
-import { getDb, must } from './db.js';
+import { getDb, must, demandedSiteIds, matchesSiteFilter } from './db.js';
 import { dfsRequest, isAuthError, SPAIN } from './dataforseo.js';
 
 /**
@@ -136,12 +136,13 @@ async function main() {
   const today = new Date().toISOString().slice(0, 10);
 
   const db = getDb();
+  const demanded = await demandedSiteIds(db, 'seo');
   const sites = (
     must(await db.from('sites').select('id, base_url, active').eq('active', true).order('created_at'), 'sites') as {
       id: string;
       base_url: string;
     }[]
-  ).filter((s) => !filter || s.base_url.includes(filter));
+  ).filter((s) => demanded.has(s.id) && matchesSiteFilter(s.base_url, filter));
   if (!sites.length) throw new Error(`Ninguna web activa${filter ? ` contiene «${filter}»` : ''}.`);
 
   let totalCost = 0;

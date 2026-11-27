@@ -18,7 +18,15 @@ services:
         value: https://ltddtuycbonkgwaxsfgm.supabase.co
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
-      - key: DASHBOARD_PASSWORD
+      - key: SUPABASE_PUBLISHABLE_KEY
+        value: sb_publishable_KFQ1BOpFT0Ln_Fwi_2J4CA_tMlf442Z
+      - key: SITE_URL
+        sync: false
+      - key: GOOGLE_AUTH_ENABLED
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
         sync: false
       - key: GITHUB_TOKEN
         sync: false

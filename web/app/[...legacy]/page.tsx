@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
-import { getProjects, projectPath } from '@/lib/project';
+import { getOwnProjects, getProjects, projectPath } from '@/lib/project';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +13,8 @@ export default async function Legacy({
   params: Promise<{ legacy: string[] }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const [{ legacy }, sp, projects] = await Promise.all([params, searchParams, getProjects()]);
+  const [{ legacy }, sp, own, all] = await Promise.all([params, searchParams, getOwnProjects(), getProjects()]);
+  const projects = own.length ? own : all;
   if (!SECTIONS.has(legacy[0]) || !projects.length) notFound();
   const query = new URLSearchParams();
   for (const [k, v] of Object.entries(sp)) for (const x of [v].flat()) if (x !== undefined) query.append(k, x);

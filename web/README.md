@@ -1,6 +1,17 @@
-# COMPETE · Panel (MVP)
+# COMPETE · Panel
 
-Panel interno para gestionar las marcas y webs que se capturan y ver los resultados: resumen, informe diario, comparativa de precios, promociones de la home y estado de las capturas.
+Producto SaaS: web pública (landing, precios, legales), registro y acceso de usuarios, alta guiada de proyectos, suscripciones con Stripe y el panel con los resultados (resumen, informe diario, comparativa de precios, promociones, tráfico, reseñas, publicidad y capturas).
+
+## Cuentas, workspaces y planes
+
+- **Usuarios**: Supabase Auth con email y contraseña (con confirmación por email) y Google (`GOOGLE_AUTH_ENABLED=1` cuando el proveedor esté configurado en Supabase). Al registrarse, un disparador crea su perfil (`profiles`) y su workspace (`workspaces` + `workspace_members`).
+- **Workspaces**: cada proyecto pertenece a uno. El usuario solo ve los proyectos de sus workspaces; el acceso se comprueba en el servidor (`lib/project.ts`, `marcas/actions.ts`). Los admins (`profiles.is_admin`) ven todos los proyectos y tienen los controles globales.
+- **Planes** (`plans`): límites de proyectos y competidores y módulos (`catalog`, `promos`, `reviews`, `ads`, `seo`, `alerts`). Prueba de 14 días sin tarjeta (plan `trial`, 3 competidores). Al caducar la prueba o la suscripción, el panel manda a `/cuenta`.
+- **Stripe**: `/cuenta` abre Checkout o el portal de cliente; el webhook `/api/stripe/webhook` copia la suscripción al workspace. Los precios de Stripe se enlazan en `plans.stripe_price_monthly` y `stripe_price_yearly`.
+- **Pausas**: pausar un competidor (`project_competitors.paused_at`) o un proyecto (`projects.paused_at`) solo afecta a ese proyecto. La vista `v_site_demand` decide qué webs se capturan y con qué módulos: las que siga algún proyecto vivo sin pausar. `sites.active` queda como interruptor global de administración.
+- **Idiomas**: las páginas nuevas leen sus textos de `lib/i18n.ts` (es/en, cookie `lang`); el resto del panel se irá pasando ahí.
+
+Para hacer admin a un usuario: `update profiles set is_admin = true where email = '…';` y, para que vea los proyectos internos como suyos, añádelo al workspace interno: `insert into workspace_members (workspace_id, user_id) select w.id, p.user_id from workspaces w, profiles p where w.plan_id = 'internal' and p.email = '…';`
 
 Next.js 16 (App Router, componentes de servidor) + Supabase + Tailwind 4 + Recharts.
 
@@ -41,7 +52,10 @@ npm run dev                   # http://localhost:3000
 Variables:
 
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`: la clave secreta solo se usa en el servidor; nunca llega al navegador.
-- `DASHBOARD_PASSWORD`: el navegador pide usuario y contraseña (vale cualquier usuario). Opcional en local (`npm run dev`); en producción es obligatoria y sin ella el panel responde 503.
+- `SUPABASE_PUBLISHABLE_KEY`: clave pública, para la sesión de los usuarios.
+- `SITE_URL`: URL pública (enlaces de emails, vuelta de Google y Stripe). En Supabase, *Authentication → URL Configuration*: *Site URL* = esta URL y *Redirect URLs* = `<SITE_URL>/auth/callback`.
+- `GOOGLE_AUTH_ENABLED=1`: muestra el botón de Google.
+- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`: pagos. Webhook en `<SITE_URL>/api/stripe/webhook` con los eventos `checkout.session.completed` y `customer.subscription.created|updated|deleted`.
 - `GITHUB_TOKEN` (opcional): token con permiso *Actions: write* sobre el repositorio para lanzar capturas desde el panel. `GITHUB_REPO` por defecto es `jaumegodia/compete`.
 
 ## Despliegue

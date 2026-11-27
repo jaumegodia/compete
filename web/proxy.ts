@@ -1,30 +1,43 @@
+import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-/**
- * Contraseña única. Sin DASHBOARD_PASSWORD el panel solo se abre en desarrollo; en producción responde 503.
- * Usa la autenticación básica del navegador (cualquier usuario + la contraseña).
- */
-export function proxy(request: NextRequest) {
-  const password = process.env.DASHBOARD_PASSWORD;
-  if (!password) {
-    // En local se puede trabajar sin contraseña; publicado, nunca se sirve abierto.
-    if (process.env.NODE_ENV !== 'production') return NextResponse.next();
-    return new NextResponse('Falta DASHBOARD_PASSWORD en el servidor', { status: 503 });
-  }
+/** Rutas que se ven sin sesión: web pública, acceso y webhooks. */
+const PUBLIC = [/^\/$/, /^\/precios$/, /^\/legal(\/|$)/, /^\/login$/, /^\/registro$/, /^\/recuperar$/, /^\/auth\//, /^\/api\/stripe\/webhook$/, /^\/en(\/|$)/];
 
-  const header = request.headers.get('authorization') ?? '';
-  const [scheme, encoded] = header.split(' ');
-  if (scheme === 'Basic' && encoded) {
-    const decoded = atob(encoded);
-    const given = decoded.slice(decoded.indexOf(':') + 1);
-    if (given === password) return NextResponse.next();
-  }
-  return new NextResponse('Acceso restringido', {
-    status: 401,
-    headers: { 'WWW-Authenticate': 'Basic realm="COMPETE", charset="UTF-8"' },
+/**
+ * Refresca la sesión de Supabase en cada petición (el token caduca cada hora) y manda a /login a quien
+ * entra sin sesión en el panel. El acceso a cada proyecto se comprueba después, en el servidor (lib/project.ts).
+ */
+export async function proxy(request: NextRequest) {
+  let response = NextResponse.next({ request });
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_PUBLISHABLE_KEY;
+  if (!url || !key) return new NextResponse('Faltan SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY en el servidor', { status: 503 });
+
+  const supabase = createServerClient(url, key, {
+    cookies: {
+      getAll: () => request.cookies.getAll(),
+      setAll: (list) => {
+        list.forEach(({ name, value }) => request.cookies.set(name, value));
+        response = NextResponse.next({ request });
+        list.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+      },
+    },
   });
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const path = request.nextUrl.pathname;
+  if (!user && !PUBLIC.some((re) => re.test(path))) {
+    const login = request.nextUrl.clone();
+    login.pathname = '/login';
+    login.search = `?next=${encodeURIComponent(path + request.nextUrl.search)}`;
+    return NextResponse.redirect(login);
+  }
+  return response;
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|icon.svg|.*\\.(?:png|jpg|svg|webp|ico)$).*)'],
 };

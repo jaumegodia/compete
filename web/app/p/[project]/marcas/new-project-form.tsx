@@ -8,11 +8,11 @@ export function NewProjectForm({ from = '/' }: { from?: string }) {
       <input type="hidden" name="from" value={from} />
       <label className="flex flex-col gap-1 text-xs text-ink-2">
         Tu marca
-        <input name="name" required placeholder="Marmota" className={inputClass} />
+        <input name="name" required placeholder="Tu marca" className={inputClass} />
       </label>
       <label className="flex flex-col gap-1 text-xs text-ink-2">
         Web
-        <input name="url" required placeholder="comounamarmota.com" className={inputClass} />
+        <input name="url" required placeholder="www.tumarca.com" className={inputClass} />
       </label>
       <button className={primaryButtonClass}>Crear proyecto</button>
     </form>

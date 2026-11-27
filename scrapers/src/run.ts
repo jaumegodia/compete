@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { adapters, detectPlatform } from './adapters/index.js';
-import { getDb, must } from './db.js';
+import { demandedSiteIds, getDb, matchesSiteFilter, must } from './db.js';
 import { normalizeBase } from './http.js';
 import { persistPromos, persistScrape } from './persist.js';
 import { scrapePromos, type PromoSnapshot } from './promos.js';
@@ -94,10 +94,11 @@ async function main() {
   }
 
   const db = getDb();
-  let query = db.from('sites').select('id, base_url, platform, currency, include_url_patterns, scrape_config').eq('active', true);
-  const only = value('site');
-  if (only) query = query.ilike('base_url', `%${only}%`);
-  const sites = must(await query, 'select sites') as {
+  const query = db.from('sites').select('id, base_url, platform, currency, include_url_patterns, scrape_config').eq('active', true);
+  // Solo las webs que algún proyecto vivo sigue sin pausar (ver v_site_demand)
+  const [catalog, promos] = await Promise.all([demandedSiteIds(db, 'catalog'), demandedSiteIds(db, 'promos')]);
+  const only = value('site') ?? process.env.SITE;
+  const all = must(await query, 'select sites') as {
     id: string;
     base_url: string;
     platform: Platform | 'auto';
@@ -105,6 +106,7 @@ async function main() {
     include_url_patterns: string[] | null;
     scrape_config: Record<string, unknown> | null;
   }[];
+  const sites = all.filter((s) => catalog.has(s.id) && matchesSiteFilter(s.base_url, only));
   if (!sites.length) return console.log('No hay webs activas que capturar.');
 
   let failures = 0;
@@ -157,7 +159,7 @@ async function main() {
         .update({ status: 'error', finished_at: new Date().toISOString(), error: msg.slice(0, 2000), diagnostics })
         .eq('id', run.id);
     }
-    await capturePromos(db, site.id, run.id, base);
+    if (promos.has(site.id)) await capturePromos(db, site.id, run.id, base);
   }
   console.log(`\nTerminado: ${sites.length - failures}/${sites.length} webs OK.`);
   if (failures === sites.length) process.exitCode = 1;
