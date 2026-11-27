@@ -1,7 +1,8 @@
 import { Badge, Card, Empty, PageHeader, Table, buttonClass } from '@/components/ui';
 import { dateTime, num } from '@/lib/format';
 import { canDispatch } from '@/lib/github';
-import { getBrands, getRuns } from '@/lib/queries';
+import { getProject } from '@/lib/project';
+import { getRuns } from '@/lib/queries';
 import { runCapture } from '../marcas/actions';
 
 export const dynamic = 'force-dynamic';
@@ -12,8 +13,9 @@ const duration = (a: string, b: string | null) => {
   return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60} s`;
 };
 
-export default async function Capturas() {
-  const [runs, brands] = await Promise.all([getRuns(100), getBrands()]);
+export default async function Capturas({ params }: { params: Promise<{ project: string }> }) {
+  const { project, brands, siteIds } = await getProject((await params).project);
+  const runs = await getRuns(siteIds, 100);
   const name = (id: string) => brands.find((b) => b.id === id)?.name ?? '—';
   return (
     <>
@@ -23,6 +25,7 @@ export default async function Capturas() {
         actions={
           canDispatch() ? (
             <form action={runCapture}>
+              <input type="hidden" name="project" value={project.slug} />
               <button className={buttonClass}>Capturar todo ahora</button>
             </form>
           ) : (

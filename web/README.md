@@ -4,18 +4,30 @@ Panel interno para gestionar las marcas y webs que se capturan y ver los resulta
 
 Next.js 16 (App Router, componentes de servidor) + Supabase + Tailwind 4 + Recharts.
 
+## Proyectos
+
+Todo el panel se ve dentro de un **proyecto**: un mercado con una marca propia y sus competidores (p. ej. Marmota frente a Emma, Flex…; otro cliente de zapatillas frente a los suyos). El selector de la barra lateral cambia de proyecto y se queda en la misma sección. Cada página solo muestra las marcas y webs del proyecto elegido.
+
+- Las marcas y sus webs se comparten: si dos proyectos vigilan la misma web, se captura una sola vez y ambos ven su histórico.
+- Pausar una web la pausa en todos los proyectos. Una marca que está en otro proyecto no se puede borrar desde este: solo quitarla del proyecto.
+- Los proyectos se crean y se borran en *Marcas y webs*. Al borrar un proyecto se conservan las marcas y sus datos.
+- Los enlaces antiguos (`/informe`, `/marcas/…`) llevan a la misma página del primer proyecto.
+
 ## Pantallas
+
+Todas cuelgan de `/p/<proyecto>` (p. ej. `/p/marmota/informe`). `/` entra en el primer proyecto.
 
 | Ruta | Qué muestra |
 |---|---|
-| `/` | Resumen por marca (catálogo, precio tachado, stock, promoción de la home, nota) y cambios de los últimos 7 días |
-| `/informe?fecha=AAAA-MM-DD` | Informe diario: cambios por marca, promoción de la home frente a la captura anterior, mayores bajadas y subidas, capturas del día |
-| `/comparativa` | Precio actual de tu marca y sus competidores en una misma medida (p. ej. 150x190), de más barato a más caro |
-| `/promociones` | Promoción anunciada en la home de cada marca, día a día |
-| `/marcas` | Alta de marcas y webs, competidores de cada marca propia, pausar/reactivar, borrar y lanzar capturas |
-| `/marcas/[id]` | Catálogo actual de una marca, con filtros y productos retirados |
-| `/productos/[id]` | Ficha de producto: histórico de precio, variantes y cambios |
-| `/capturas` | Últimas ejecuciones del scraper |
+| `/p/<proyecto>` | Resumen por marca (catálogo, precio tachado, stock, promoción de la home, nota) y cambios de los últimos 7 días |
+| `…/informe?fecha=AAAA-MM-DD` | Informe diario: cambios por marca, promoción de la home frente a la captura anterior, mayores bajadas y subidas, capturas del día |
+| `…/comparativa` | Precio actual de tu marca y sus competidores en una misma medida (p. ej. 150x190), de más barato a más caro |
+| `…/promociones` | Promoción anunciada en la home de cada marca, día a día |
+| `…/trafico`, `…/resenas`, `…/publicidad` | Tráfico orgánico y keywords, reseñas de Trustpilot y anuncios de Google |
+| `…/marcas` | Competidores del proyecto (nuevos o ya capturados en otro proyecto), webs de cada marca, pausar/reactivar, capturas, alta y baja de proyectos |
+| `…/marcas/[id]` | Catálogo actual de una marca, con filtros y productos retirados |
+| `…/productos/[id]` | Ficha de producto: histórico de precio, variantes y cambios |
+| `…/capturas` | Últimas ejecuciones del scraper en las webs del proyecto |
 
 ## Puesta en marcha
 

@@ -3,7 +3,7 @@ import { Badge, BrandDot, Card, Empty, PageHeader, Table, buttonClass, inputClas
 import { PRODUCT_TYPES, productType, type ProductType } from '@/lib/categories';
 import { db, fetchAll } from '@/lib/db';
 import { brandColors, diffPct, money, pct } from '@/lib/format';
-import { getBrands, getCompetitorLinks, getSites } from '@/lib/queries';
+import { getProject } from '@/lib/project';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,28 +28,28 @@ const median = (xs: number[]) => {
 };
 
 export default async function Comparativa({
+  params,
   searchParams,
 }: {
-  searchParams: Promise<{ marca?: string; tipo?: string; medida?: string; q?: string }>;
+  params: Promise<{ project: string }>;
+  searchParams: Promise<{ tipo?: string; medida?: string; q?: string }>;
 }) {
-  const sp = await searchParams;
-  const [brands, links, sites] = await Promise.all([getBrands(), getCompetitorLinks(), getSites()]);
-  const own = brands.filter((b) => b.is_own);
-  const brand = own.find((b) => b.id === sp.marca) ?? own[0];
+  const [{ project }, sp] = await Promise.all([params, searchParams]);
+  const { brands, siteIds, path } = await getProject(project);
+  const brand = brands.find((b) => b.is_own);
   if (!brand) {
     return (
       <>
         <PageHeader title="Comparativa" />
         <Card>
-          <Empty>Marca una de tus marcas como propia en Marcas y webs para comparar.</Empty>
+          <Empty>Este proyecto todavía no tiene su marca dada de alta.</Empty>
         </Card>
       </>
     );
   }
   const colors = brandColors(brands);
-  const brandIds = [brand.id, ...links.filter((l) => l.brand_id === brand.id).map((l) => l.competitor_id)];
+  const brandIds = brands.map((b) => b.id);
   const name = (id: string) => brands.find((b) => b.id === id)?.name ?? '—';
-  const siteIds = sites.filter((s) => brandIds.includes(s.brand_id)).map((s) => s.id);
 
   // Todas las variantes activas de tu marca y sus competidores (son pocos miles: se filtra en memoria)
   const raw = (await fetchAll(
@@ -125,9 +125,9 @@ export default async function Comparativa({
 
   const href = (params: Record<string, string | undefined>) => {
     const u = new URLSearchParams();
-    const merged = { marca: own.length > 1 ? brand.id : undefined, tipo, medida: size, q: sp.q, ...params };
+    const merged = { tipo, medida: size, q: sp.q, ...params };
     for (const [k, v] of Object.entries(merged)) if (v) u.set(k, v);
-    return `/comparativa?${u}`;
+    return `${path('/comparativa')}?${u}`;
   };
   const typeLabel = tipo === ALL ? 'todos los tipos' : tipo.toLowerCase();
 
@@ -156,18 +156,6 @@ export default async function Comparativa({
         </div>
         {/* key: al navegar entre pestañas el formulario se vuelve a crear y muestra la medida real */}
         <form key={`${brand.id}|${tipo}|${size}|${sp.q ?? ''}`} className="flex flex-wrap items-end gap-3">
-          {own.length > 1 && (
-            <label className="flex flex-col gap-1 text-xs text-ink-2">
-              Marca
-              <select name="marca" defaultValue={brand.id} className={inputClass}>
-                {own.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
           <input type="hidden" name="tipo" value={tipo} />
           <label className="flex flex-col gap-1 text-xs text-ink-2">
             Medida
@@ -255,7 +243,7 @@ export default async function Comparativa({
                       </span>
                     </td>
                     <td className="max-w-xs">
-                      <Link href={`/productos/${r.product.id}?v=${r.id}`} className="text-accent hover:underline">
+                      <Link href={path(`/productos/${r.product.id}?v=${r.id}`)} className="text-accent hover:underline">
                         {r.product.title}
                       </Link>
                       {(tipo === ALL || anySize) && (

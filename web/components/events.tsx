@@ -51,11 +51,14 @@ export function EventsTable({
   events,
   brandName,
   brandColor,
+  productHref,
   showDate = true,
 }: {
   events: EventRow[];
   brandName: (brandId: string) => string;
   brandColor: (brandId: string) => string;
+  /** Enlace a la ficha del producto dentro del proyecto. */
+  productHref: (productId: string) => string;
   showDate?: boolean;
 }) {
   if (!events.length) return <Empty>No hay cambios en este periodo.</Empty>;
@@ -89,7 +92,7 @@ export function EventsTable({
             </td>
             <td className="max-w-xs">
               {e.product ? (
-                <Link href={`/productos/${e.product.id}`} className="text-accent hover:underline">
+                <Link href={productHref(e.product.id)} className="text-accent hover:underline">
                   {e.product.title}
                 </Link>
               ) : (
