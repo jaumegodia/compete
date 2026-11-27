@@ -2,7 +2,7 @@ import { Badge, BrandDot, Card, Empty, PageHeader, Table, buttonClass, inputClas
 import { TrafficChart, type TrafficPoint } from '@/components/traffic-chart';
 import { db, fetchAll } from '@/lib/db';
 import { brandColors, date, num } from '@/lib/format';
-import { getBrands, getSites } from '@/lib/queries';
+import { getProject } from '@/lib/project';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,9 +39,15 @@ const mondayOf = (iso: string) => {
   return d.toISOString().slice(0, 10);
 };
 
-export default async function Publicidad({ searchParams }: { searchParams: Promise<{ marca?: string; formato?: string }> }) {
-  const sp = await searchParams;
-  const [brands, sites] = await Promise.all([getBrands(), getSites()]);
+export default async function Publicidad({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ project: string }>;
+  searchParams: Promise<{ marca?: string; formato?: string }>;
+}) {
+  const [{ project }, sp] = await Promise.all([params, searchParams]);
+  const { brands, sites } = await getProject(project);
   const colors = brandColors(brands);
   const brandOfSite = new Map(sites.map((s) => [s.id, s.brand_id]));
   const siteIds = sites.filter((s) => s.active).map((s) => s.id);

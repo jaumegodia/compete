@@ -1,11 +1,13 @@
 import { Badge, BrandDot, Card, Empty, PageHeader, Table } from '@/components/ui';
 import { brandColors, date, pct, shiftDay, todayMadrid } from '@/lib/format';
-import { getBrands, getPromotions, getSites } from '@/lib/queries';
+import { getProject } from '@/lib/project';
+import { getPromotions } from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Promociones() {
-  const [brands, sites, promos] = await Promise.all([getBrands(), getSites(), getPromotions(shiftDay(todayMadrid(), -45))]);
+export default async function Promociones({ params }: { params: Promise<{ project: string }> }) {
+  const { brands, sites, siteIds } = await getProject((await params).project);
+  const promos = await getPromotions(siteIds, shiftDay(todayMadrid(), -45));
   const colors = brandColors(brands);
   const visible = brands.filter((b) => sites.some((s) => s.brand_id === b.id && promos.some((p) => p.site_id === s.id)));
   const days = [...new Set(promos.map((p) => p.captured_on))].sort().reverse();

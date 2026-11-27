@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { Badge, BrandDot, Card, Empty, PageHeader, Stat, Table, buttonClass, inputClass } from '@/components/ui';
 import { db, must } from '@/lib/db';
 import { brandColors, date, money, num, pct } from '@/lib/format';
-import { getBrands } from '@/lib/queries';
+import { getProject } from '@/lib/project';
 import { PRODUCT_TYPES, productType } from '@/lib/categories';
 
 export const dynamic = 'force-dynamic';
@@ -30,11 +30,11 @@ export default async function BrandCatalog({
   params,
   searchParams,
 }: {
-  params: Promise<{ id: string }>;
+  params: Promise<{ project: string; id: string }>;
   searchParams: Promise<{ q?: string; tipo?: string; retirados?: string }>;
 }) {
-  const [{ id }, { q = '', tipo = '', retirados }] = await Promise.all([params, searchParams]);
-  const brands = await getBrands();
+  const [{ project, id }, { q = '', tipo = '', retirados }] = await Promise.all([params, searchParams]);
+  const { brands, path } = await getProject(project);
   const brand = brands.find((b) => b.id === id);
   if (!brand) notFound();
   const colors = brandColors(brands);
@@ -68,7 +68,7 @@ export default async function BrandCatalog({
           </span>
         }
         actions={
-          <Link href="/marcas" className={buttonClass}>
+          <Link href={path('/marcas')} className={buttonClass}>
             Gestionar webs
           </Link>
         }
@@ -121,7 +121,7 @@ export default async function BrandCatalog({
               {shown.map((p) => (
                 <tr key={p.id}>
                   <td className="max-w-sm">
-                    <Link href={`/productos/${p.id}`} className="text-accent hover:underline">
+                    <Link href={path(`/productos/${p.id}`)} className="text-accent hover:underline">
                       {p.title}
                     </Link>
                     {isNew(p) && <span className="ml-2"><Badge tone="accent">Nuevo</Badge></span>}

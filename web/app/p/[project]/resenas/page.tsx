@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Badge, BrandDot, Card, Empty, PageHeader, Table, buttonClass, inputClass } from '@/components/ui';
 import { db, fetchAll, must } from '@/lib/db';
 import { brandColors, date, num, pct } from '@/lib/format';
-import { getBrands, getSites } from '@/lib/queries';
+import { getProject } from '@/lib/project';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,9 +29,15 @@ interface ReviewRow {
 const stars = (r: number | null) => (r === null ? '—' : `★ ${Number(r).toLocaleString('es-ES', { maximumFractionDigits: 1 })}`);
 const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 
-export default async function Resenas({ searchParams }: { searchParams: Promise<{ marca?: string; notas?: string }> }) {
-  const sp = await searchParams;
-  const [brands, sites] = await Promise.all([getBrands(), getSites()]);
+export default async function Resenas({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ project: string }>;
+  searchParams: Promise<{ marca?: string; notas?: string }>;
+}) {
+  const [{ project }, sp] = await Promise.all([params, searchParams]);
+  const { brands, sites, path } = await getProject(project);
   const colors = brandColors(brands);
   const brandOfSite = new Map(sites.map((s) => [s.id, s.brand_id]));
   const siteIds = sites.filter((s) => s.active).map((s) => s.id);
@@ -227,7 +233,7 @@ export default async function Resenas({ searchParams }: { searchParams: Promise<
         )}
         {selected && (
           <p className="mt-3 text-xs">
-            <Link href="/resenas" className="text-accent hover:underline">Ver todas las marcas</Link>
+            <Link href={path('/resenas')} className="text-accent hover:underline">Ver todas las marcas</Link>
           </p>
         )}
       </Card>

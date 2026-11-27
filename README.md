@@ -138,7 +138,8 @@ Migraciones en `supabase/migrations/`, datos del piloto en `supabase/seed.sql`.
 
 | Tabla | Contenido |
 |---|---|
-| `brands`, `brand_competitors` | Marcas y quién compite con quién |
+| `projects`, `project_competitors` | Proyectos (mercados): la marca propia de cada uno (`own_brand_id`) y sus competidores. Una marca puede estar en varios proyectos y sus webs se capturan una sola vez |
+| `brands` | Marcas, propias o competidoras (`is_own` y `brand_competitors` quedan obsoletas: se borrarán cuando el panel nuevo esté desplegado) |
 | `sites` | Webs a capturar (`platform`: auto, shopify, woocommerce, generic, google_shopping; `include_url_patterns`: filtro opcional de fichas; `scrape_config`: configuración propia, p. ej. de Google Shopping) |
 | `products`, `variants` | Catálogo, con `first_seen_at`, `last_seen_at` y `removed_at` |
 | `price_snapshots` | Un registro diario por variante: precio, precio tachado y disponibilidad |

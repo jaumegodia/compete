@@ -1,4 +1,4 @@
--- Piloto: Marmota y sus tres competidores (webs propias)
+-- Piloto: proyecto Marmota con sus tres competidores (webs propias)
 with b as (
   insert into public.brands (name) values ('Marmota'),('Emma'),('Flex'),('Dormideo') returning id, name
 ), s as (
@@ -10,6 +10,9 @@ with b as (
     when 'Dormideo' then 'https://www.dormideo.com' end,
     case name when 'Dormideo' then 'shopify' else 'auto' end
   from b returning brand_id
+), p as (
+  insert into public.projects (slug, name, own_brand_id)
+  select 'marmota', 'Marmota', id from b where name = 'Marmota' returning id
 )
-insert into public.brand_competitors (brand_id, competitor_id)
-select m.id, c.id from b m, b c where m.name = 'Marmota' and c.name <> 'Marmota';
+insert into public.project_competitors (project_id, brand_id)
+select p.id, b.id from p, b where b.name <> 'Marmota';

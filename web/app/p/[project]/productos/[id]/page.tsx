@@ -6,7 +6,8 @@ import { Badge, BrandDot, Card, PageHeader, Table } from '@/components/ui';
 import { productType } from '@/lib/categories';
 import { db, fetchAll, must } from '@/lib/db';
 import { brandColors, date, money, num, pct } from '@/lib/format';
-import { getBrands, type EventRow } from '@/lib/queries';
+import { getProject } from '@/lib/project';
+import { type EventRow } from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,8 +22,15 @@ interface Variant {
   current_available: boolean | null;
 }
 
-export default async function ProductPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ v?: string }> }) {
-  const [{ id }, { v: selected }] = await Promise.all([params, searchParams]);
+export default async function ProductPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ project: string; id: string }>;
+  searchParams: Promise<{ v?: string }>;
+}) {
+  const [{ project, id }, { v: selected }] = await Promise.all([params, searchParams]);
+  const { brands, path } = await getProject(project);
   const product = must(
     await db()
       .from('products')
@@ -35,10 +43,10 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
     rating: number | null; review_count: number | null; first_seen_at: string; removed_at: string | null;
     site: { brand_id: string; base_url: string };
   } | null;
-  if (!product) notFound();
+  // Solo productos de las marcas del proyecto
+  if (!product || !brands.some((b) => b.id === product.site.brand_id)) notFound();
 
-  const [brands, variants, events] = await Promise.all([
-    getBrands(),
+  const [variants, events] = await Promise.all([
     db()
       .from('variants')
       .select('id, title, sku, size, removed_at, current_price, current_compare_at_price, current_available')
@@ -90,7 +98,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
         subtitle={
           <span className="inline-flex flex-wrap items-center gap-2">
             {brand && (
-              <Link href={`/marcas/${brand.id}`} className="inline-flex items-center gap-1.5 hover:underline">
+              <Link href={path(`/marcas/${brand.id}`)} className="inline-flex items-center gap-1.5 hover:underline">
                 <BrandDot color={colors[brand.id]} />
                 {brand.name}
               </Link>
@@ -127,7 +135,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
         </Card>
       </div>
 
-      <Card title="Variantes" className="mt-4" right={chosen && <Link href={`/productos/${id}`} className="text-xs text-accent hover:underline">Ver precio mínimo</Link>}>
+      <Card title="Variantes" className="mt-4" right={chosen && <Link href={path(`/productos/${id}`)} className="text-xs text-accent hover:underline">Ver precio mínimo</Link>}>
         <Table>
           <thead>
             <tr>
@@ -145,7 +153,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
               return (
                 <tr key={x.id} className={x.id === chosen?.id ? 'bg-own' : ''}>
                   <td>
-                    <Link href={`/productos/${id}?v=${x.id}`} className="text-accent hover:underline">
+                    <Link href={path(`/productos/${id}?v=${x.id}`)} className="text-accent hover:underline">
                       {x.title ?? 'Única'}
                     </Link>
                   </td>
@@ -162,7 +170,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
       </Card>
 
       <Card title="Cambios de este producto" className="mt-4">
-        <EventsTable events={events} brandName={(b) => brands.find((x) => x.id === b)?.name ?? '—'} brandColor={(b) => colors[b] ?? '#8a93a6'} />
+        <EventsTable events={events} brandName={(b) => brands.find((x) => x.id === b)?.name ?? '—'} brandColor={(b) => colors[b] ?? '#8a93a6'} productHref={(p) => path(`/productos/${p}`)} />
       </Card>
     </>
   );

@@ -3,7 +3,7 @@ import { Badge, BrandDot, Card, Empty, PageHeader, Table, buttonClass, inputClas
 import { TrafficChart, type TrafficPoint } from '@/components/traffic-chart';
 import { db, fetchAll, must } from '@/lib/db';
 import { brandColors, date, diffPct, num, pct } from '@/lib/format';
-import { getBrands, getSites } from '@/lib/queries';
+import { getProject } from '@/lib/project';
 
 export const dynamic = 'force-dynamic';
 
@@ -76,15 +76,17 @@ function Delta({ now, before }: { now: number; before: number | undefined }) {
 }
 
 export default async function Trafico({
+  params,
   searchParams,
 }: {
+  params: Promise<{ project: string }>;
   searchParams: Promise<{ metrica?: string; rango?: string; marca?: string }>;
 }) {
-  const sp = await searchParams;
+  const [{ project }, sp] = await Promise.all([params, searchParams]);
   const metric: Metric = sp.metrica && sp.metrica in METRICS ? (sp.metrica as Metric) : 'organic_etv';
   const range = sp.rango && sp.rango in RANGES ? sp.rango : '24';
 
-  const [brands, sites] = await Promise.all([getBrands(), getSites()]);
+  const { brands, sites, path } = await getProject(project);
   const colors = brandColors(brands);
   const brandOfSite = new Map(sites.map((s) => [s.id, s.brand_id]));
   const siteIds = sites.filter((s) => s.active).map((s) => s.id);
@@ -168,7 +170,7 @@ export default async function Trafico({
 
   const link = (p: Record<string, string>) => {
     const q = new URLSearchParams({ metrica: metric, rango: range, ...(kwBrand ? { marca: kwBrand.id } : {}), ...p });
-    return `/trafico?${q}`;
+    return `${path('/trafico')}?${q}`;
   };
 
   return (
@@ -199,7 +201,7 @@ export default async function Trafico({
                 <td className="whitespace-nowrap">
                   <span className="inline-flex items-center gap-2">
                     <BrandDot color={colors[brand.id]} />
-                    <Link href={`/marcas/${brand.id}`} className="hover:underline">{brand.name}</Link>
+                    <Link href={path(`/marcas/${brand.id}`)} className="hover:underline">{brand.name}</Link>
                     {brand.is_own && <Badge tone="accent">Tu marca</Badge>}
                   </span>
                 </td>

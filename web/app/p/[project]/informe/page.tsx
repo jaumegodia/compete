@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { EventsTable } from '@/components/events';
 import { Badge, BrandDot, Card, Empty, PageHeader, Table, buttonClass } from '@/components/ui';
 import { EVENT_LABELS, TZ, brandColors, date, dateTime, num, pct, shiftDay, todayMadrid } from '@/lib/format';
-import { getBrands, getEvents, getPromotions, getRuns, getSites, type EventRow, type PromoRow } from '@/lib/queries';
+import { getProject } from '@/lib/project';
+import { getEvents, getPromotions, getRuns, type EventRow, type PromoRow } from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,17 +18,22 @@ function promoText(p: PromoRow | undefined) {
   };
 }
 
-export default async function Informe({ searchParams }: { searchParams: Promise<{ fecha?: string }> }) {
-  const { fecha } = await searchParams;
+export default async function Informe({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ project: string }>;
+  searchParams: Promise<{ fecha?: string }>;
+}) {
+  const [{ project }, { fecha }] = await Promise.all([params, searchParams]);
+  const { brands, sites, siteIds, path } = await getProject(project);
   const today = todayMadrid();
   const day = fecha && /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? fecha : today;
 
-  const [brands, sites, rawEvents, promos, runs] = await Promise.all([
-    getBrands(),
-    getSites(),
-    getEvents(`${shiftDay(day, -1)}T20:00:00Z`, `${shiftDay(day, 1)}T04:00:00Z`),
-    getPromotions(shiftDay(day, -14)),
-    getRuns(100),
+  const [rawEvents, promos, runs] = await Promise.all([
+    getEvents(siteIds, `${shiftDay(day, -1)}T20:00:00Z`, `${shiftDay(day, 1)}T04:00:00Z`),
+    getPromotions(siteIds, shiftDay(day, -14)),
+    getRuns(siteIds, 100),
   ]);
   const events = rawEvents.filter((e) => madridDay(e.detected_at) === day);
   const dayRuns = runs.filter((r) => madridDay(r.started_at) === day);
@@ -58,11 +64,11 @@ export default async function Informe({ searchParams }: { searchParams: Promise<
         subtitle={`${date(day)}${day === today ? ' (hoy)' : ''} · ${num(events.length)} cambios detectados`}
         actions={
           <>
-            <Link href={`/informe?fecha=${shiftDay(day, -1)}`} className={buttonClass}>
+            <Link href={`${path('/informe')}?fecha=${shiftDay(day, -1)}`} className={buttonClass}>
               ← Día anterior
             </Link>
             {day < today && (
-              <Link href={`/informe?fecha=${shiftDay(day, 1)}`} className={buttonClass}>
+              <Link href={`${path('/informe')}?fecha=${shiftDay(day, 1)}`} className={buttonClass}>
                 Día siguiente →
               </Link>
             )}
@@ -179,16 +185,16 @@ export default async function Informe({ searchParams }: { searchParams: Promise<
       {(drops.length > 0 || rises.length > 0) && (
         <div className="mb-4 grid gap-4">
           <Card title="Mayores bajadas de precio">
-            {drops.length ? <EventsTable events={drops} brandName={name} brandColor={(id) => colors[id]} showDate={false} /> : <Empty>Ninguna.</Empty>}
+            {drops.length ? <EventsTable events={drops} brandName={name} brandColor={(id) => colors[id]} productHref={(id) => path(`/productos/${id}`)} showDate={false} /> : <Empty>Ninguna.</Empty>}
           </Card>
           <Card title="Mayores subidas de precio">
-            {rises.length ? <EventsTable events={rises} brandName={name} brandColor={(id) => colors[id]} showDate={false} /> : <Empty>Ninguna.</Empty>}
+            {rises.length ? <EventsTable events={rises} brandName={name} brandColor={(id) => colors[id]} productHref={(id) => path(`/productos/${id}`)} showDate={false} /> : <Empty>Ninguna.</Empty>}
           </Card>
         </div>
       )}
 
       <Card title="Todos los cambios del día" className="mb-4">
-        <EventsTable events={events} brandName={name} brandColor={(id) => colors[id]} />
+        <EventsTable events={events} brandName={name} brandColor={(id) => colors[id]} productHref={(id) => path(`/productos/${id}`)} />
       </Card>
 
       <Card title="Capturas del día">
