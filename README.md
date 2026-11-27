@@ -102,7 +102,7 @@ El dominio de Trustpilot es el de la web sin `www`. Si una marca tiene el perfil
 update sites set trustpilot_domain = 'emma-sleep.com' where base_url = 'https://www.emma-colchon.es';
 ```
 
-Workflow **Reseñas (Trustpilot vía DataForSEO)**: cada lunes y a mano. Panel: **Reseñas** (`/resenas`).
+Workflow **Reseñas (Trustpilot vía DataForSEO)**: cada día (40 reseñas más recientes por web; las marcas reciben unas pocas al día, así que no se pierde ninguna) y a mano. Panel: **Reseñas** (`/resenas`).
 
 ### Publicidad (Google Ads Transparency)
 
