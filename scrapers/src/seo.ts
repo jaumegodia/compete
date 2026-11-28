@@ -1,5 +1,5 @@
-import { getDb, must, demandedSiteIds, matchesSiteFilter } from './db.js';
-import { dfsRequest, isAuthError, SPAIN } from './dataforseo.js';
+import { getDb, must, demandedSiteIds, matchesSiteFilter, siteCountries } from './db.js';
+import { dfsRequest, isAuthError, marketOf, SPAIN } from './dataforseo.js';
 
 /**
  * Tráfico y SEO por dominio con DataForSEO Labs (Google España).
@@ -117,8 +117,8 @@ const monthsAgo = (k: number) => {
 };
 
 /** Una tarea live de Labs. Devuelve result[0] y el coste. */
-export async function labs(endpoint: string, task: Record<string, unknown>): Promise<{ result: any; cost: number }> {
-  const json = await dfsRequest(`/dataforseo_labs/google/${endpoint}/live`, [{ ...SPAIN, ...task }]);
+export async function labs(endpoint: string, task: Record<string, unknown>, market = SPAIN): Promise<{ result: any; cost: number }> {
+  const json = await dfsRequest(`/dataforseo_labs/google/${endpoint}/live`, [{ ...market, ...task }]);
   const t = json.tasks?.[0];
   if (!t) throw new Error('DataForSEO: respuesta sin tareas');
   if (t.status_code !== 20000) throw new Error(`DataForSEO ${endpoint}: ${t.status_code} ${t.status_message}`);
@@ -136,7 +136,7 @@ async function main() {
   const today = new Date().toISOString().slice(0, 10);
 
   const db = getDb();
-  const demanded = await demandedSiteIds(db, 'seo');
+  const [demanded, countries] = await Promise.all([demandedSiteIds(db, 'seo'), siteCountries(db)]);
   const sites = (
     must(await db.from('sites').select('id, base_url, active').eq('active', true).order('created_at'), 'sites') as {
       id: string;
@@ -149,12 +149,13 @@ async function main() {
   let failures = 0;
   for (const site of sites) {
     const domain = domainOf(site.base_url);
-    console.log(`→ ${domain}`);
+    const market = marketOf(countries.get(site.id));
+    console.log(`→ ${domain} (${countries.get(site.id) ?? 'ES'})`);
     try {
       // El histórico completo se paga por mes: solo la primera vez; después, los últimos 3 meses
       const { count } = await db.from('domain_metrics').select('month', { count: 'exact', head: true }).eq('site_id', site.id);
       const from = (count ?? 0) >= 12 && !process.env.SEO_FULL_HISTORY ? monthsAgo(3) : HISTORY_FROM;
-      const hist = await labs('historical_rank_overview', { target: domain, date_from: from });
+      const hist = await labs('historical_rank_overview', { target: domain, date_from: from }, market);
       const months = parseHistory(hist.result?.items ?? []);
       totalCost += hist.cost;
       const last = months.at(-1);
@@ -171,7 +172,7 @@ async function main() {
         limit: topN,
         item_types: ['organic'],
         order_by: ['ranked_serp_element.serp_item.etv,desc'],
-      });
+      }, market);
       const keywords = parseRankedKeywords(ranked.result?.items ?? []);
       totalCost += ranked.cost;
       console.log(

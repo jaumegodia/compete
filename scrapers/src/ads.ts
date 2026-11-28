@@ -1,5 +1,5 @@
-import { dfsRequest, isAuthError, PENDING } from './dataforseo.js';
-import { getDb, must, demandedSiteIds, matchesSiteFilter } from './db.js';
+import { dfsRequest, isAuthError, PENDING, marketOf } from './dataforseo.js';
+import { getDb, must, demandedSiteIds, matchesSiteFilter, siteCountries } from './db.js';
 import { sleep } from './http.js';
 import { parseTimestamp } from './reviews.js';
 import { domainOf } from './seo.js';
@@ -124,12 +124,12 @@ function thirdParty(ads: AdRow[], since: number) {
 
 const EP = '/serp/google/ads_search';
 
-async function fetchAds(domains: string[], depth: number) {
+async function fetchAds(targets: { domain: string; location_code: number }[], depth: number) {
   let cost = 0;
   const results = new Map<string, { items: any[] } | { error: string }>();
   const posted = await dfsRequest(
     `${EP}/task_post`,
-    domains.map((target) => ({ target, location_code: 2724, platform: 'all', depth, tag: target })),
+    targets.map(({ domain, location_code }) => ({ target: domain, location_code, platform: 'all', depth, tag: domain })),
   );
   cost += Number(posted.cost ?? 0);
   const pending = new Map<string, string>();
@@ -166,7 +166,7 @@ async function main() {
   const now = new Date().toISOString();
 
   const db = getDb();
-  const demanded = await demandedSiteIds(db, 'ads');
+  const [demanded, countries] = await Promise.all([demandedSiteIds(db, 'ads'), siteCountries(db)]);
   const sites = (
     must(await db.from('sites').select('id, base_url, ads_domain, ads_advertiser_ids').eq('active', true).order('created_at'), 'sites') as {
       id: string;
@@ -181,7 +181,10 @@ async function main() {
   console.log(`Google Ads Transparency: ${sites.length} webs, hasta ${depth} anuncios por web`);
   let fetched;
   try {
-    fetched = await fetchAds([...new Set(domainOfSite.values())], depth);
+    // Un dominio por web, en el país de los proyectos que la siguen
+    const targets = new Map<string, number>();
+    for (const s of sites) targets.set(domainOfSite.get(s.id)!, marketOf(countries.get(s.id)).location_code);
+    fetched = await fetchAds([...targets].map(([domain, location_code]) => ({ domain, location_code })), depth);
   } catch (e) {
     console.error(`error: ${(e as Error).message}`);
     process.exit(1);

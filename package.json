@@ -17,11 +17,15 @@
     "reviews": "tsx scrapers/src/reviews.ts",
     "reviews:dry": "tsx scrapers/src/reviews.ts --dry-run",
     "ads": "tsx scrapers/src/ads.ts",
-    "ads:dry": "tsx scrapers/src/ads.ts --dry-run"
+    "ads:dry": "tsx scrapers/src/ads.ts --dry-run",
+    "classify": "tsx scrapers/src/classify.ts",
+    "classify:dry": "tsx scrapers/src/classify.ts --dry-run"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.14.0",
     "@supabase/supabase-js": "^2.45.0",
-    "cheerio": "^1.2.0"
+    "cheerio": "^1.2.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

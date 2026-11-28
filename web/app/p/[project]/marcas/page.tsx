@@ -4,7 +4,8 @@ import { brandColors, dateTime, num } from '@/lib/format';
 import { canDispatch } from '@/lib/github';
 import { getProject } from '@/lib/project';
 import { getAllBrands } from '@/lib/queries';
-import { addBrand, addSite, deleteBrand, deleteProject, runCapture, setCompetitorPaused, setProjectPaused, setSiteActive, toggleCompetitor } from './actions';
+import { addBrand, addSite, deleteBrand, deleteProject, runCapture, setCompetitorPaused, setProjectPaused, setSiteActive, toggleCompetitor, updateProjectSettings } from './actions';
+import { COUNTRIES, VERTICALS } from '@/lib/markets';
 import { NewProjectForm } from './new-project-form';
 
 export const dynamic = 'force-dynamic';
@@ -211,6 +212,34 @@ export default async function Marcas({
             de la barra lateral.
           </p>
           <NewProjectForm from={path('/marcas')} />
+        </Card>
+
+        <Card title="Sector y mercado">
+          <form action={updateProjectSettings} className="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+            {projectField}
+            <label className="flex flex-col gap-1 text-xs text-ink-2">
+              Sector (decide los tipos de producto)
+              <select name="vertical" defaultValue={project.vertical ?? ''} className={inputClass}>
+                <option value="">Sin especificar</option>
+                {VERTICALS.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.es}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-ink-2">
+              Mercado (país de SEO, anuncios y Google Shopping)
+              <select name="country" defaultValue={project.country} className={inputClass}>
+                {COUNTRIES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.es}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button className={buttonClass}>Guardar</button>
+          </form>
         </Card>
 
         <Card title={project.paused_at ? 'Reanudar este proyecto' : 'Pausar este proyecto'}>

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Badge, BrandDot, Card, Empty, PageHeader, Table, buttonClass, inputClass } from '@/components/ui';
-import { PRODUCT_TYPES, productType, type ProductType } from '@/lib/categories';
+import { productTypeOf, sortedTypes, typeLabel as labelOf } from '@/lib/categories';
+import { verticalOf } from '@/lib/taxonomy';
 import { db, fetchAll } from '@/lib/db';
 import { brandColors, diffPct, money, pct } from '@/lib/format';
 import { getProject } from '@/lib/project';
@@ -13,9 +14,9 @@ interface VariantRow {
   current_price: number | null;
   current_compare_at_price: number | null;
   current_available: boolean | null;
-  product: { id: string; title: string; category: string | null; site: { brand_id: string } };
+  product: { id: string; title: string; category: string | null; url: string | null; product_type: string | null; site: { brand_id: string } };
 }
-type Row = VariantRow & { type: ProductType; brandId: string; price: number };
+type Row = VariantRow & { type: string; brandId: string; price: number };
 
 const ALL = 'todos';
 const ANY_SIZE = 'todas';
@@ -35,7 +36,8 @@ export default async function Comparativa({
   searchParams: Promise<{ tipo?: string; medida?: string; q?: string }>;
 }) {
   const [{ project }, sp] = await Promise.all([params, searchParams]);
-  const { brands, siteIds, path } = await getProject(project);
+  const { brands, siteIds, path, project: proj } = await getProject(project);
+  const vertical = proj.vertical;
   const brand = brands.find((b) => b.is_own);
   if (!brand) {
     return (
@@ -57,7 +59,7 @@ export default async function Comparativa({
       db()
       .from('variants')
       .select(
-        'id, size, current_price, current_compare_at_price, current_available, product:products!inner(id, title, category, removed_at, site_id, site:sites(brand_id))',
+        'id, size, current_price, current_compare_at_price, current_available, product:products!inner(id, title, category, url, product_type, removed_at, site_id, site:sites(brand_id))',
       )
       .not('current_price', 'is', null)
       .is('removed_at', null)
@@ -69,16 +71,20 @@ export default async function Comparativa({
   )) as unknown as VariantRow[];
   const all: Row[] = raw.map((r) => ({
     ...r,
-    type: productType(r.product.title, r.product.category),
+    type: productTypeOf(r.product, vertical),
     brandId: r.product.site.brand_id,
     price: Number(r.current_price),
   }));
 
   // Tipos en los que tienes productos, con cuántos productos hay en total
   const productsOf = (rows: Row[]) => new Set(rows.map((r) => r.product.id)).size;
-  const types = PRODUCT_TYPES.filter((t) => t !== 'Otros' && all.some((r) => r.type === t && r.brandId === brand.id));
-  const defaultType: string = types.includes('Colchones') ? 'Colchones' : (types[0] ?? ALL);
-  const tipo = sp.tipo === ALL || types.includes(sp.tipo as ProductType) ? (sp.tipo as string) : defaultType;
+  const types = sortedTypes(
+    all.filter((r) => r.brandId === brand.id && r.type !== 'otros').map((r) => r.type),
+    vertical,
+  );
+  // Por defecto, el primer tipo del sector en el que tienes productos (colchones en descanso, sofás en hogar…)
+  const defaultType: string = types[0] ?? ALL;
+  const tipo = sp.tipo === ALL || (sp.tipo && types.includes(sp.tipo)) ? (sp.tipo as string) : defaultType;
   const ofType = tipo === ALL ? all : all.filter((r) => r.type === tipo);
 
   // Medidas que tienes en ese tipo, ordenadas por número de productos (tuyos y de la competencia)
@@ -87,14 +93,16 @@ export default async function Comparativa({
   const sizes = [...bySize.keys()]
     .filter((s) => bySize.get(s)!.some((r) => r.brandId === brand.id))
     .sort((a, b) => productsOf(bySize.get(b)!) - productsOf(bySize.get(a)!) || a.localeCompare(b, 'es', { numeric: true }));
-  // Por defecto, la medida con más productos si en ella hay competencia; si no (almohadas, sofás…), todas las medidas
+  // Por defecto, la medida con más productos si en ella hay competencia; si no (almohadas, sofás…), todas las medidas.
+  // En sectores sin medidas comparables (moda, belleza…) siempre todas: se compara el precio «desde».
+  const sizeMatters = verticalOf(vertical)?.bySize ?? false;
   const competed = (s: string) => bySize.get(s)!.some((r) => r.brandId !== brand.id);
   // y si esa medida reúne al menos la mitad de los productos del tipo (en almohadas cada web mide distinto)
   const best = sizes.find(competed);
-  const defaultSize = best && productsOf(bySize.get(best)!) * 2 >= productsOf(ofType) ? best : ANY_SIZE;
+  const defaultSize = sizeMatters && best && productsOf(bySize.get(best)!) * 2 >= productsOf(ofType) ? best : ANY_SIZE;
   const size = sp.medida === ANY_SIZE || (sp.medida && sizes.includes(sp.medida)) ? sp.medida : defaultSize;
   const anySize = size === ANY_SIZE;
-  const sizeLabel = anySize ? 'todas las medidas' : size;
+  const sizeLabel = anySize ? (sizeMatters ? 'todas las medidas' : 'precio desde') : size;
   const q = (sp.q ?? '').trim().toLowerCase();
 
   // Una fila por producto: su variante más barata en esa medida (o en cualquiera)
@@ -129,13 +137,13 @@ export default async function Comparativa({
     for (const [k, v] of Object.entries(merged)) if (v) u.set(k, v);
     return `${path('/comparativa')}?${u}`;
   };
-  const typeLabel = tipo === ALL ? 'todos los tipos' : tipo.toLowerCase();
+  const typeName = tipo === ALL ? 'todos los tipos' : labelOf(tipo).toLowerCase();
 
   return (
     <>
       <PageHeader
         title="Comparativa de precios"
-        subtitle={`${brand.name} frente a ${brandIds.length - 1} competidores: mismo tipo de producto y misma medida`}
+        subtitle={`${brand.name} frente a ${brandIds.length - 1} competidores: mismo tipo de producto${sizeMatters ? ' y misma medida' : ''}`}
       />
 
       <Card className="mb-4">
@@ -149,7 +157,7 @@ export default async function Comparativa({
                 href={href({ tipo: t, medida: undefined })}
                 className={`rounded-full border px-3 py-1 text-sm ${active ? 'border-accent bg-accent text-white' : 'border-line text-ink-2 hover:border-ink-3'}`}
               >
-                {t === ALL ? 'Todos' : t} <span className={active ? 'opacity-80' : 'text-ink-3'}>{n}</span>
+                {t === ALL ? 'Todos' : labelOf(t)} <span className={active ? 'opacity-80' : 'text-ink-3'}>{n}</span>
               </Link>
             );
           })}
@@ -177,7 +185,7 @@ export default async function Comparativa({
       </Card>
 
       {summary.length > 0 && (
-        <Card className="mb-4" title={`Resumen: ${typeLabel} en ${sizeLabel}`}>
+        <Card className="mb-4" title={`Resumen: ${typeName} en ${sizeLabel}`}>
           <Table>
             <thead>
               <tr>
@@ -214,7 +222,7 @@ export default async function Comparativa({
         </Card>
       )}
 
-      <Card title={`${tipo === ALL ? 'Todos los productos' : tipo} en ${sizeLabel} · ${list.length} productos, de más barato a más caro`}>
+      <Card title={`${tipo === ALL ? 'Todos los productos' : labelOf(tipo)} en ${sizeLabel} · ${list.length} productos, de más barato a más caro`}>
         {!list.length ? (
           <Empty>No hay productos de este tipo con esta medida y estos filtros.</Empty>
         ) : (
@@ -247,7 +255,7 @@ export default async function Comparativa({
                         {r.product.title}
                       </Link>
                       {(tipo === ALL || anySize) && (
-                        <div className="text-xs text-ink-3">{[tipo === ALL ? r.type : null, anySize ? (r.size ?? 'sin medida') : null].filter(Boolean).join(' · ')}</div>
+                        <div className="text-xs text-ink-3">{[tipo === ALL ? labelOf(r.type) : null, anySize ? (r.size ?? 'sin medida') : null].filter(Boolean).join(' · ')}</div>
                       )}
                       {r.current_available === false && <span className="ml-2"><Badge tone="bad">Sin stock</Badge></span>}
                     </td>
@@ -280,7 +288,7 @@ export default async function Comparativa({
           </Table>
         )}
         <p className="mt-3 text-xs text-ink-3">
-          El tipo de producto se deduce del nombre y de la categoría que publica cada web. La barra muestra el precio de venta; el
+          El tipo de producto se clasifica a partir del nombre, la categoría que publica cada web y su URL. La barra muestra el precio de venta; el
           contorno discontinuo, el precio tachado si la web lo publica. Con &quot;todas las medidas&quot; se toma la variante más barata
           de cada producto, así que solo es orientativo. &quot;Tu producto más cercano&quot; es el tuyo del mismo tipo
           con el precio más parecido, no por características.

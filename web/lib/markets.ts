@@ -18,20 +18,5 @@ export const COUNTRIES: { code: string; es: string; en: string; currency: string
   { code: 'NO', es: 'Noruega', en: 'Norway', currency: 'NOK' },
 ];
 
-/**
- * Sectores sugeridos. Es texto libre: el sector solo orienta la clasificación de productos y la comparativa;
- * cualquier tienda se captura igual.
- */
-export const VERTICALS: { id: string; es: string; en: string }[] = [
-  { id: 'descanso', es: 'Descanso (colchones, almohadas…)', en: 'Sleep (mattresses, pillows…)' },
-  { id: 'moda', es: 'Moda y calzado', en: 'Fashion & footwear' },
-  { id: 'belleza', es: 'Belleza y cosmética', en: 'Beauty & cosmetics' },
-  { id: 'hogar', es: 'Hogar y decoración', en: 'Home & decor' },
-  { id: 'electronica', es: 'Electrónica', en: 'Electronics' },
-  { id: 'deporte', es: 'Deporte', en: 'Sports' },
-  { id: 'alimentacion', es: 'Alimentación y bebidas', en: 'Food & drinks' },
-  { id: 'mascotas', es: 'Mascotas', en: 'Pets' },
-  { id: 'infantil', es: 'Bebé e infantil', en: 'Baby & kids' },
-  { id: 'salud', es: 'Salud y bienestar', en: 'Health & wellness' },
-  { id: 'otro', es: 'Otro', en: 'Other' },
-];
+/** Sectores: ver lib/taxonomy.ts (cada uno con sus tipos de producto). */
+export { VERTICALS } from './taxonomy';

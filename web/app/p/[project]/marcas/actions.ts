@@ -239,3 +239,34 @@ export async function runCapture(form: FormData) {
   }
   back(slug, `Captura lanzada${site ? ` para ${site}` : ''}. Tarda entre 1 y 12 minutos; el resultado aparecerá en Capturas.`);
 }
+
+/** Sector y mercado del proyecto. El sector decide los tipos de producto; el mercado, el país de SEO, anuncios y Shopping. */
+export async function updateProjectSettings(form: FormData) {
+  const slug = field(form, 'project');
+  const { project } = await editableProject(slug);
+  const country = field(form, 'country').toUpperCase();
+  const vertical = field(form, 'vertical');
+  const { COUNTRIES } = await import('@/lib/markets');
+  const { verticalOf } = await import('@/lib/taxonomy');
+  if (!COUNTRIES.some((c) => c.code === country)) back(slug, 'Mercado no válido.', true);
+  if (vertical && !verticalOf(vertical)) back(slug, 'Sector no válido.', true);
+  must(await db().from('projects').update({ country, vertical: vertical || null }).eq('id', project.id), 'update project');
+  back(slug, 'Proyecto actualizado.');
+}
+
+/** Corrige a mano el tipo de un producto (solo admin: los productos se comparten entre clientes). */
+export async function setProductType(form: FormData) {
+  const slug = field(form, 'project');
+  const { session } = await editableProject(slug);
+  const productId = field(form, 'product_id');
+  const back2 = (msg: string, err = false): never => {
+    revalidatePath('/', 'layout');
+    redirect(`${projectPath(slug, `/productos/${productId}`)}?${err ? 'error' : 'ok'}=${encodeURIComponent(msg)}`);
+  };
+  if (!session.isAdmin) back2('Solo el equipo de COMPETE puede corregir tipos.', true);
+  const type = field(form, 'product_type');
+  const { isTypeKey } = await import('@/lib/taxonomy');
+  if (!isTypeKey(type)) back2('Tipo no válido.', true);
+  must(await db().from('products').update({ product_type: type, product_type_source: 'manual', product_type_at: new Date().toISOString() }).eq('id', productId), 'update type');
+  back2('Tipo corregido.');
+}

@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { adapters, detectPlatform } from './adapters/index.js';
-import { demandedSiteIds, getDb, matchesSiteFilter, must } from './db.js';
+import { demandedSiteIds, getDb, matchesSiteFilter, must, siteCountries } from './db.js';
+import { marketOf } from './dataforseo.js';
 import { normalizeBase } from './http.js';
 import { persistPromos, persistScrape } from './persist.js';
 import { scrapePromos, type PromoSnapshot } from './promos.js';
@@ -96,7 +97,7 @@ async function main() {
   const db = getDb();
   const query = db.from('sites').select('id, base_url, platform, currency, include_url_patterns, scrape_config').eq('active', true);
   // Solo las webs que algún proyecto vivo sigue sin pausar (ver v_site_demand)
-  const [catalog, promos] = await Promise.all([demandedSiteIds(db, 'catalog'), demandedSiteIds(db, 'promos')]);
+  const [catalog, promos, countries] = await Promise.all([demandedSiteIds(db, 'catalog'), demandedSiteIds(db, 'promos'), siteCountries(db)]);
   const only = value('site') ?? process.env.SITE;
   const all = must(await query, 'select sites') as {
     id: string;
@@ -118,7 +119,10 @@ async function main() {
     ) as { id: string };
     let diagnostics: Record<string, unknown> | null = null;
     try {
-      const result = await scrapeUrl(base, site.platform, site.include_url_patterns, site.scrape_config);
+      // Google Shopping busca en el país del proyecto, salvo que la web fije el suyo en scrape_config
+      const market = marketOf(countries.get(site.id));
+      const config = { locationCode: market.location_code, languageCode: market.language_code, ...(site.scrape_config ?? {}) };
+      const result = await scrapeUrl(base, site.platform, site.include_url_patterns, config);
       diagnostics = result.diagnostics ?? null;
       if (!result.products.length) {
         const detail = result.warnings.filter((w) => w !== result.error).slice(0, 3);

@@ -3,7 +3,9 @@ import { notFound } from 'next/navigation';
 import { EventsTable } from '@/components/events';
 import { PriceChart, type PricePoint } from '@/components/price-chart';
 import { Badge, BrandDot, Card, PageHeader, Table } from '@/components/ui';
-import { productType } from '@/lib/categories';
+import { productTypeOf, sortedTypes, typeLabel } from '@/lib/categories';
+import { TYPES } from '@/lib/taxonomy';
+import { setProductType } from '../../marcas/actions';
 import { db, fetchAll, must } from '@/lib/db';
 import { brandColors, date, money, num, pct } from '@/lib/format';
 import { getProject } from '@/lib/project';
@@ -27,14 +29,15 @@ export default async function ProductPage({
   searchParams,
 }: {
   params: Promise<{ project: string; id: string }>;
-  searchParams: Promise<{ v?: string }>;
+  searchParams: Promise<{ v?: string; ok?: string; error?: string }>;
 }) {
-  const [{ project, id }, { v: selected }] = await Promise.all([params, searchParams]);
-  const { brands, path } = await getProject(project);
+  const [{ project, id }, { v: selected, ok, error }] = await Promise.all([params, searchParams]);
+  const ctx = await getProject(project);
+  const { brands, path } = ctx;
   const product = must(
     await db()
       .from('products')
-      .select('id, title, url, category, vendor, image_url, description, rating, review_count, first_seen_at, removed_at, site:sites(brand_id, base_url)')
+      .select('id, title, url, category, product_type, vendor, image_url, description, rating, review_count, first_seen_at, removed_at, site:sites(brand_id, base_url)')
       .eq('id', id)
       .maybeSingle(),
     'product',
@@ -103,7 +106,7 @@ export default async function ProductPage({
                 {brand.name}
               </Link>
             )}
-            <span>· {productType(product.title, product.category)}</span>
+            <span>· {typeLabel(productTypeOf(product, ctx.project.vertical))}</span>
             {product.category && <span className="text-ink-3">({product.category} en la web)</span>}
             <span>· visto por primera vez el {date(product.first_seen_at)}</span>
             {product.removed_at && <Badge tone="bad">Retirado el {date(product.removed_at)}</Badge>}
@@ -115,6 +118,24 @@ export default async function ProductPage({
           </a>
         }
       />
+
+      {ok && <div className="mb-4 rounded-md border border-good-line bg-good-soft px-4 py-2.5 text-sm text-good">{ok}</div>}
+      {error && <div className="mb-4 rounded-md border border-bad-line bg-bad-soft px-4 py-2.5 text-sm text-bad">{error}</div>}
+      {ctx.session.isAdmin && (
+        <form action={setProductType} className="mb-4 flex flex-wrap items-center gap-2 text-sm">
+          <input type="hidden" name="project" value={ctx.project.slug} />
+          <input type="hidden" name="product_id" value={product.id} />
+          <span className="text-ink-2">Tipo de producto (admin):</span>
+          <select name="product_type" defaultValue={productTypeOf(product, ctx.project.vertical)} className="rounded-md border border-line bg-white px-2 py-1">
+            {sortedTypes(TYPES.map((t) => t.key), ctx.project.vertical).map((k) => (
+              <option key={k} value={k}>
+                {typeLabel(k)}
+              </option>
+            ))}
+          </select>
+          <button className="rounded-md border border-line bg-surface px-2.5 py-1 font-medium hover:bg-hover">Corregir</button>
+        </form>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
         <Card title={chosen ? `Precio de ${chosen.title ?? chosen.sku ?? 'la variante'}` : 'Precio mínimo del producto'}>

@@ -45,6 +45,15 @@ export async function demandedSiteIds(db: SupabaseClient, module: Module): Promi
   return new Set(rows.map((r) => r.site_id));
 }
 
+/**
+ * País de cada web: el de los proyectos vivos que la siguen (v_site_demand.countries). Si la siguen proyectos
+ * de varios países se usa el primero (los datos de SEO y publicidad se guardan por web, no por país).
+ */
+export async function siteCountries(db: SupabaseClient): Promise<Map<string, string>> {
+  const rows = must(await db.from('v_site_demand').select('site_id, countries'), 'v_site_demand') as { site_id: string; countries: string[] | null }[];
+  return new Map(rows.map((r) => [r.site_id, [...(r.countries ?? [])].sort()[0] ?? 'ES']));
+}
+
 /** Filtro --site: uno o varios trozos de URL separados por comas o espacios ("emma, flex.es"). */
 export function matchesSiteFilter(baseUrl: string, filter: string | undefined | null): boolean {
   const parts = (filter ?? '').split(/[\s,]+/).filter(Boolean);

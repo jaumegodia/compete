@@ -116,6 +116,27 @@ update sites set ads_advertiser_ids = '{AR11515220324631183361}' where base_url 
 
 `sites.ads_domain` cambia el dominio de búsqueda. Workflow **Publicidad (Google Ads Transparency)**: cada día (~0,10 $). Panel: **Publicidad** (`/publicidad`). Google no publica inversión ni impresiones de anuncios comerciales; la actividad (volumen y ritmo de anuncios) es lo medible.
 
+### Tipos de producto (cualquier sector)
+
+Cada proyecto tiene un **sector** (`projects.vertical`: descanso, hogar, moda, belleza, electrónica, deporte, alimentación, mascotas, infantil, salud u otro) y cada producto un **tipo** (`products.product_type`) de la taxonomía de `web/lib/taxonomy.ts`, que comparten el panel y los scrapers.
+
+`npm run classify` (en el workflow diario, después de la captura) clasifica los productos sin tipo:
+
+1. **Reglas** del sector sobre el título, la categoría de la tienda y la URL. Con los catálogos actuales cubren el 97-100 % (Sklum, Pummba, Flex, Maxcolchón…). «Pack de 4 sillas» cuenta como sillas: *packs* es solo la combinación de productos distintos.
+2. Lo que no encaja, con **Claude** (secreto `ANTHROPIC_API_KEY` en GitHub Actions), eligiendo solo entre los tipos del sector. `CLASSIFY_MODEL` cambia el modelo (por defecto `claude-opus-5-5`; `claude-haiku-5-5` es mucho más barato).
+3. Sin IA, `otros` (`product_type_source = 'fallback'`), que se reintenta cuando haya clave.
+
+Un admin puede corregir el tipo desde la ficha de producto (`product_type_source = 'manual'`; `--reclassify` no lo pisa). Para añadir un sector o un tipo basta con editar `web/lib/taxonomy.ts`. La comparativa por medida (90x190…) solo se usa en sectores con `bySize` (descanso); en el resto compara el precio «desde» de cada producto del mismo tipo.
+
+```bash
+npm run classify:dry -- --site sklum   # muestra la clasificación sin guardar
+npm run classify -- --reclassify       # vuelve a clasificar todo (menos lo corregido a mano)
+```
+
+### Mercados
+
+El país del proyecto (`projects.country`, 16 países europeos) decide dónde se consulta Google en DataForSEO: SEO, anuncios y Google Shopping (`MARKETS` en `scrapers/src/dataforseo.ts`). Si una web la siguen proyectos de varios países se usa uno (los datos se guardan por web).
+
 ### Promociones de la home
 
 Con la Directiva Ómnibus muchas marcas no publican precios tachados, pero sí anuncian su descuento en la home. Cada día se lee la home de cada web y se guarda en `site_promotions`:

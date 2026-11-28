@@ -46,6 +46,17 @@ jobs:
         run: |
           if [ -n "$SITE" ]; then npm run scrape -- --site "$SITE"; else npm run scrape; fi
 
+      - name: Clasificar productos nuevos (tipo de producto)
+        if: github.event_name == 'schedule' || inputs.mode == 'full'
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # Opcional: sin clave se clasifica solo por reglas
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SITE: ${{ inputs.site }}
+        run: npm run classify
+
       - name: Prueba sin base de datos
         if: github.event_name == 'workflow_dispatch' && inputs.mode == 'dry'
         env:

@@ -4,7 +4,7 @@ import { Badge, BrandDot, Card, Empty, PageHeader, Stat, Table, buttonClass, inp
 import { db, must } from '@/lib/db';
 import { brandColors, date, money, num, pct } from '@/lib/format';
 import { getProject } from '@/lib/project';
-import { PRODUCT_TYPES, productType } from '@/lib/categories';
+import { productTypeOf, sortedTypes, typeLabel } from '@/lib/categories';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +13,7 @@ interface ProductSummary {
   title: string;
   url: string;
   category: string | null;
+  product_type: string | null;
   rating: number | null;
   review_count: number | null;
   first_seen_at: string;
@@ -34,17 +35,17 @@ export default async function BrandCatalog({
   searchParams: Promise<{ q?: string; tipo?: string; retirados?: string }>;
 }) {
   const [{ project, id }, { q = '', tipo = '', retirados }] = await Promise.all([params, searchParams]);
-  const { brands, path } = await getProject(project);
+  const { brands, path, project: proj } = await getProject(project);
   const brand = brands.find((b) => b.id === id);
   if (!brand) notFound();
   const colors = brandColors(brands);
 
   const all = (
     must(await db().from('v_product_summary').select('*').eq('brand_id', id).order('title'), 'products') as ProductSummary[]
-  ).map((p) => ({ ...p, type: productType(p.title, p.category) }));
+  ).map((p) => ({ ...p, type: productTypeOf(p, proj.vertical) }));
   const active = all.filter((p) => !p.removed_at);
   const removed = all.filter((p) => p.removed_at);
-  const types = PRODUCT_TYPES.filter((t) => active.some((p) => p.type === t));
+  const types = sortedTypes(active.map((p) => p.type), proj.vertical);
   const needle = q.trim().toLowerCase();
   const shown = (retirados ? removed : active).filter(
     (p) => (!needle || p.title.toLowerCase().includes(needle)) && (!tipo || p.type === tipo),
@@ -91,7 +92,7 @@ export default async function BrandCatalog({
             <option value="">Todos los tipos</option>
             {types.map((t) => (
               <option key={t} value={t}>
-                {t} ({active.filter((p) => p.type === t).length})
+                {typeLabel(t)} ({active.filter((p) => p.type === t).length})
               </option>
             ))}
           </select>
@@ -127,7 +128,7 @@ export default async function BrandCatalog({
                     {isNew(p) && <span className="ml-2"><Badge tone="accent">Nuevo</Badge></span>}
                     {p.removed_at && <div className="text-xs text-ink-3">Retirado el {date(p.removed_at)}</div>}
                   </td>
-                  <td className="whitespace-nowrap">{p.type}</td>
+                  <td className="whitespace-nowrap">{typeLabel(p.type)}</td>
                   <td className="text-ink-2">{p.category ?? '—'}</td>
                   <td className="num text-right">{num(p.variants)}</td>
                   <td className="num whitespace-nowrap text-right">

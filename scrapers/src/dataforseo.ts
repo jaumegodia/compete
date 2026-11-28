@@ -4,6 +4,31 @@ import { sleep } from './http.js';
 
 export const DFS = 'https://api.dataforseo.com/v3';
 export const SPAIN = { location_code: 2724, language_code: 'es' };
+
+/**
+ * Mercados: país del proyecto (ISO) → ubicación e idioma de Google en DataForSEO
+ * (location_code = id de geo target de Google Ads). Debe cubrir los países de web/lib/markets.ts.
+ */
+export const MARKETS: Record<string, { location_code: number; language_code: string }> = {
+  ES: SPAIN,
+  PT: { location_code: 2620, language_code: 'pt' },
+  FR: { location_code: 2250, language_code: 'fr' },
+  IT: { location_code: 2380, language_code: 'it' },
+  DE: { location_code: 2276, language_code: 'de' },
+  AT: { location_code: 2040, language_code: 'de' },
+  NL: { location_code: 2528, language_code: 'nl' },
+  BE: { location_code: 2056, language_code: 'nl' },
+  IE: { location_code: 2372, language_code: 'en' },
+  GB: { location_code: 2826, language_code: 'en' },
+  CH: { location_code: 2756, language_code: 'de' },
+  PL: { location_code: 2616, language_code: 'pl' },
+  SE: { location_code: 2752, language_code: 'sv' },
+  DK: { location_code: 2208, language_code: 'da' },
+  FI: { location_code: 2246, language_code: 'fi' },
+  NO: { location_code: 2578, language_code: 'no' },
+};
+
+export const marketOf = (country: string | null | undefined) => MARKETS[(country ?? 'ES').toUpperCase()] ?? SPAIN;
 export const PENDING = new Set([40601, 40602]); // Task Handed / Task In Queue
 
 function authHeaders(): Record<string, string> {
